@@ -31,6 +31,28 @@ struct StepResult {
 }
 
 //-----------------------------------------------------
+// Read input
+//-----------------------------------------------------
+fn read_input() -> Option<Action> {
+    use std::io::{self, Write};
+
+    print!("Enter action (w/a/s/d): ");
+    io::stdout().flush().unwrap();
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    let input = input.trim();
+
+    match input {
+        "w" => Some(Action::Up),
+        "s" => Some(Action::Down),
+        "a" => Some(Action::Left),
+        "d" => Some(Action::Right),
+        _ => None,
+    }
+}
+
+//-----------------------------------------------------
 // Step Function
 //-----------------------------------------------------
 
@@ -70,36 +92,33 @@ fn main() {
     
     let mut loop_count = 0;
     let mut agent_pos = Position { row: 0, col: 0 };
-
-    let agent_steps: Vec<Action> = vec![
-        Action::Down, Action::Down, Action::Down, Action::Down, Action::Down,
-        Action::Down,Action::Down, Action::Down, Action::Down, Action::Down,
-        Action::Right, Action::Right, Action::Right, Action::Right, Action::Right,
-        Action::Right, Action::Right, Action::Right, Action::Right, Action::Right,
-    ];
-
     let mut grid: grid::Grid = grid::create_grid(GRID_SIZE, GRID_SIZE);
     grid.data[agent_pos.row][agent_pos.col] = grid::Cell::Agent;
     grid.data[GRID_SIZE - 1][GRID_SIZE - 1] = grid::Cell::Goal;
     
     grid::print_grid(&grid);
 
-    for action in agent_steps {
-        let step_result = step(&mut grid, agent_pos, action);
+    while loop_count <= 100 {
+        if let Some(action) = read_input() {
+            let step_result = step(&mut grid, agent_pos, action);
+            agent_pos = step_result.position; // Update agent position for the next step
 
-        agent_pos = step_result.position; // Update agent position for the next step
-
-        grid::print_grid(&grid);
-        println!("New Agent Position: {:?}", step_result.position);
-        println!("Reward: {}", step_result.reward);
-        println!("Done: {}", step_result.done);
-        
-        if step_result.done {
-            println!("Goal reached!");
-            break;
+            grid::print_grid(&grid);
+            println!("New Agent Position: {:?}", step_result.position);
+            println!("Reward: {}", step_result.reward);
+            println!("Done: {}", step_result.done);
+            
+            if step_result.done {
+                println!("Goal reached!");
+                break;
+            }
+            loop_count += 1;
+        } else {
+            println!("Invalid input. Please enter w/a/s/d.");
         }
-        loop_count += 1;
+        
     }
+    
     println!("Total steps taken: {}", loop_count);
 
 }
