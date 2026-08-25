@@ -2,19 +2,24 @@
 // Libraries
 //-----------------------------------------------------
 
+use crate::grid::Cell::Agent;
+
 mod grid;
+
 //-----------------------------------------------------
 // Global Constants
 //-----------------------------------------------------
 
 const GRID_SIZE: usize = 10;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Action {
     Up,
     Down,
     Left,
     Right,
+    Reset,
+    Exit,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -36,7 +41,7 @@ struct StepResult {
 fn read_input() -> Option<Action> {
     use std::io::{self, Write};
 
-    print!("Enter action (w/a/s/d): ");
+    print!("Enter action (w/a/s/d/r/q): ");
     io::stdout().flush().unwrap();
 
     let mut input = String::new();
@@ -48,6 +53,8 @@ fn read_input() -> Option<Action> {
         "s" => Some(Action::Down),
         "a" => Some(Action::Left),
         "d" => Some(Action::Right),
+        "r" => Some(Action::Reset),
+        "q" => Some(Action::Exit),
         _ => None,
     }
 }
@@ -64,6 +71,8 @@ fn step(grid: &mut grid::Grid, agent_pos: Position, action: Action) -> StepResul
         Action::Down  => Position { row: if agent_pos.row < grid.height - 1 { agent_pos.row + 1 } else { agent_pos.row }, col: agent_pos.col },
         Action::Left  => Position { row: agent_pos.row, col: if agent_pos.col > 0 { agent_pos.col - 1 } else { agent_pos.col } },
         Action::Right => Position { row: agent_pos.row, col: if agent_pos.col < grid.width - 1 { agent_pos.col + 1 } else { agent_pos.col } },
+        Action::Reset => agent_pos,
+        Action::Exit  => agent_pos,
     };
 
     // Calculate reward based on the new position
@@ -89,36 +98,62 @@ fn step(grid: &mut grid::Grid, agent_pos: Position, action: Action) -> StepResul
 
 fn main() {
 
-    
-    let mut loop_count = 0;
-    let mut agent_pos = Position { row: 0, col: 0 };
-    let mut grid: grid::Grid = grid::create_grid(GRID_SIZE, GRID_SIZE);
-    grid.data[agent_pos.row][agent_pos.col] = grid::Cell::Agent;
-    grid.data[GRID_SIZE - 1][GRID_SIZE - 1] = grid::Cell::Goal;
-    
+    let agent_start = Position { row: 0, col: 0 };
+    let goal_start: Position = Position { row: GRID_SIZE - 1, col: GRID_SIZE - 1 };
+    let mut grid: grid::Grid = grid::create_grid(GRID_SIZE, GRID_SIZE, (agent_start.row, agent_start.col), (goal_start.row, goal_start.col));
+    let mut agent_pos = agent_start;
+
+    // Reset grid with agent and goal positions
+    grid::reset_grid(&mut grid);
     grid::print_grid(&grid);
 
-    while loop_count <= 100 {
-        if let Some(action) = read_input() {
-            let step_result = step(&mut grid, agent_pos, action);
-            agent_pos = step_result.position; // Update agent position for the next step
+    let mut tick: u32 = 0;
 
-            grid::print_grid(&grid);
-            println!("New Agent Position: {:?}", step_result.position);
-            println!("Reward: {}", step_result.reward);
-            println!("Done: {}", step_result.done);
-            
-            if step_result.done {
-                println!("Goal reached!");
-                break;
+    loop {
+
+        // Print the current tick
+        println!("--- Tick {} ---", tick);
+
+        // Read user input for action
+        let action = match read_input() {
+            Some(a) => a,
+            None => {
+                println!("Invalid input. Please enter w/a/s/d/r/q.");
+                continue;
             }
-            loop_count += 1;
-        } else {
-            println!("Invalid input. Please enter w/a/s/d.");
+        };
+
+        // Handle the Reset action
+        if action == Action::Reset {
+            grid::reset_grid(&mut grid);
+            agent_pos = Position { row: grid.agent_start.0, col: grid.agent_start.1 };
+            println!("Grid has been reset.");
+            grid::print_grid(&grid);
+            tick += 1;
+            continue;
         }
-        
+
+        // Handle the Exit action
+        if action == Action::Exit {
+            println!("Exiting the program.");
+            break;
+        }
+
+        let step_result = step(&mut grid, agent_pos, action);
+        agent_pos = step_result.position;
+
+        grid::print_grid(&grid);
+        println!("Reward: {}, Done: {}", step_result.reward, step_result.done);
+
+        if step_result.done {
+            println!("Goal reached at tick {}!", tick);
+            break;
+        }
+
+        tick += 1;
+
     }
-    
-    println!("Total steps taken: {}", loop_count);
+
+    println!("Total ticks passed: {}", tick);
 
 }
