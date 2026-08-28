@@ -2,8 +2,6 @@
 // Libraries
 //-----------------------------------------------------
 
-use crate::grid::Cell::Agent;
-
 mod grid;
 
 //-----------------------------------------------------
@@ -30,7 +28,9 @@ struct Position {
 
 #[derive(Debug)]
 struct StepResult {
-    position: Position,
+    position: (
+        usize, usize
+    ),
     reward: f64,
     done: bool
 }
@@ -63,33 +63,41 @@ fn read_input() -> Option<Action> {
 // Step Function
 //-----------------------------------------------------
 
-fn step(grid: &mut grid::Grid, agent_pos: Position, action: Action) -> StepResult {
+fn step(grid: &mut grid::Grid, entity_id: u32, action: Action) -> StepResult {
 
-    // Figure out the new row/col based on `action`
-    let new_pos = match action{
-        Action::Up    => Position { row: if agent_pos.row > 0 { agent_pos.row - 1 } else { agent_pos.row }, col: agent_pos.col },
-        Action::Down  => Position { row: if agent_pos.row < grid.height - 1 { agent_pos.row + 1 } else { agent_pos.row }, col: agent_pos.col },
-        Action::Left  => Position { row: agent_pos.row, col: if agent_pos.col > 0 { agent_pos.col - 1 } else { agent_pos.col } },
-        Action::Right => Position { row: agent_pos.row, col: if agent_pos.col < grid.width - 1 { agent_pos.col + 1 } else { agent_pos.col } },
-        Action::Reset => agent_pos,
-        Action::Exit  => agent_pos,
+    // Find the entity's CURRENT position by id.
+    // Hint: grid.entities.iter().find(|e| e.id == entity_id) — same pattern as print_grid,
+    // but this time you also need its .pos, and you'll need to handle the "not found" case
+    // (for now, .expect("entity not found") is fine — a real recovery strategy can come later)
+    let entity = grid.entities.iter().find(|e| e.id == entity_id).expect("entity not found");
+    let current_pos: (usize, usize) = entity.pos;
+
+    // Figure out the new row/col based on `action` — same logic as before,
+    // but working with (usize, usize) tuples instead of Position now
+    let new_pos: (usize, usize) = match action {
+        Action::Up    => (if current_pos.0 > 0 {current_pos.0 - 1 } else {current_pos.0}, current_pos.1),
+        Action::Down  => (if current_pos.0 < grid.height - 1 {current_pos.0 + 1 } else {current_pos.0}, current_pos.1),
+        Action::Left  => (current_pos.0, if current_pos.1 > 0 {current_pos.1 - 1} else {current_pos.1}),
+        Action::Right => (current_pos.0, if current_pos.1 < grid.width - 1 {current_pos.1 + 1} else {current_pos.1}),
+        Action::Reset => current_pos,
+        Action::Exit  => current_pos,
     };
 
-    // Calculate reward based on the new position
-    let reward = if grid.data[new_pos.row][new_pos.col] == grid::Cell::Goal { 1.0 } else { 0.0 };
-    let done = grid.data[new_pos.row][new_pos.col] == grid::Cell::Goal;
+    // Check if new_pos lands on any Goal-kind entity — search grid.entities again,
+    // this time for kind == EntityKind::Goal && pos == new_pos
+    let done: bool = grid.entities.iter().any(|e| e.kind == grid::EntityKind::Goal && e.pos == new_pos);
+    let reward: f64 = if done { 1.0 } else { 0.0 };
 
-    // Update the grid: set old position back to Cell::Empty, new position to Cell::Agent
-    grid.data[agent_pos.row][agent_pos.col] = grid::Cell::Empty;
-    grid.data[new_pos.row][new_pos.col] = grid::Cell::Agent;
+    // Move the entity
+    if let Some(moving_entity) = grid.entities.iter_mut().find(|e| e.id == entity_id) {
+        moving_entity.pos = new_pos;
+    }
 
-    // Return the new position, reward, and done status
     StepResult {
         position: new_pos,
-        reward: reward, 
-        done: done, 
+        reward,
+        done,
     }
-    
 }
 
 //-----------------------------------------------------
@@ -98,13 +106,12 @@ fn step(grid: &mut grid::Grid, agent_pos: Position, action: Action) -> StepResul
 
 fn main() {
 
-    let agent_start = Position { row: 0, col: 0 };
-    let goal_start: Position = Position { row: GRID_SIZE - 1, col: GRID_SIZE - 1 };
-    let mut grid: grid::Grid = grid::create_grid(GRID_SIZE, GRID_SIZE, (agent_start.row, agent_start.col), (goal_start.row, goal_start.col));
-    let mut agent_pos = agent_start;
+    let agent_start =  (0, 0);
+    let goal_pos = (GRID_SIZE - 1, GRID_SIZE - 1);
+    let enemy_start = (5, 5);
+    let config = grid::GridConfig{agent_start, goal_pos, enemy_start };
+    let mut grid: grid::Grid = grid::create_grid(GRID_SIZE, GRID_SIZE, config);
 
-    // Reset grid with agent and goal positions
-    grid::reset_grid(&mut grid);
     grid::print_grid(&grid);
 
     let mut tick: u32 = 0;
@@ -126,7 +133,6 @@ fn main() {
         // Handle the Reset action
         if action == Action::Reset {
             grid::reset_grid(&mut grid);
-            agent_pos = Position { row: grid.agent_start.0, col: grid.agent_start.1 };
             println!("Grid has been reset.");
             grid::print_grid(&grid);
             tick += 1;
@@ -139,8 +145,8 @@ fn main() {
             break;
         }
 
-        let step_result = step(&mut grid, agent_pos, action);
-        agent_pos = step_result.position;
+        let entity_id = grid.player_id.expect("entity not found");
+        let step_result = step(&mut grid, entity_id, action);
 
         grid::print_grid(&grid);
         println!("Reward: {}, Done: {}", step_result.reward, step_result.done);

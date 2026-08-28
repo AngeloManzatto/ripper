@@ -10,9 +10,27 @@ use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Cell {
-    Empty,
-    Agent,
+    Empty
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EntityKind {
+    Player,
+    Enemy,
     Goal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Entity {
+    pub id: u32,
+    pub kind: EntityKind,
+    pub pos: (usize, usize),
+}
+
+pub struct GridConfig {
+    pub agent_start: (usize, usize),
+    pub goal_pos: (usize, usize),
+    pub enemy_start: (usize, usize),
 }
 
 //-----------------------------------------------------
@@ -22,35 +40,69 @@ pub struct Grid {
     pub width: usize,
     pub height: usize,
     pub data: Vec<Vec<Cell>>,
+    pub entities: Vec<Entity>,
     pub agent_start: (usize, usize),
+    pub enemy_start:(usize, usize),
     pub goal_pos: (usize, usize),
+    pub next_id: u32,
+    pub player_id: Option<u32>
 }
 
 impl fmt::Display for Cell {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Cell::Empty => write!(f, "."),
-            Cell::Agent => write!(f, "A"),
-            Cell::Goal  => write!(f, "G"),
         }
     }
 }
 
 //-----------------------------------------------------
-// Grid utilities
+// Spawn Entity 
 //-----------------------------------------------------
 
-pub fn create_grid(
-    width: usize, 
-    height: usize, 
-    agent_start: (usize, usize), 
-    goal_pos: (usize, usize)) -> Grid {
+pub fn spawn_entity(grid: &mut Grid, kind: EntityKind, pos:(usize, usize)) -> u32
+{
+    // Get next id for entity
+    let id = grid.next_id;
 
-        // Initialize the grid with Empty cells
-        let data = vec![vec![Cell::Empty; width]; height];
+    // Initialize Entity
+    let entity: Entity = Entity { id: id, kind, pos };
 
-        // Set the agent and goal positions
-        Grid { width, height, data, agent_start, goal_pos }
+    // Update next id
+    grid.next_id += 1;
+
+    // Add the new entity on the grid
+    grid.entities.push(entity);
+
+    id
+
+}
+
+//-----------------------------------------------------
+// Create Grid
+//-----------------------------------------------------
+pub fn create_grid(width: usize, height: usize, config: GridConfig) -> Grid {
+
+    // Initialize the grid with Empty cells
+    let data = vec![vec![Cell::Empty; width]; height];
+    
+    // Initialize grid
+    let mut grid: Grid = Grid {
+        width,
+        height,
+        data,
+        entities: Vec::new(),
+        agent_start: config.agent_start,
+        enemy_start: config.enemy_start,
+        goal_pos: config.goal_pos,
+        next_id: 0,
+        player_id: None,
+    };
+    
+    // Add entities to grid
+    reset_grid(&mut grid);  // <- delegate all the spawning logic to reset_grid
+
+    grid
 }
 
 //-----------------------------------------------------
@@ -65,19 +117,41 @@ pub fn reset_grid(grid: &mut Grid) {
         }
     }
 
-    // Set the agent and goal positions
-    grid.data[grid.agent_start.0][grid.agent_start.1] = Cell::Agent;
-    grid.data[grid.goal_pos.0][grid.goal_pos.1] = Cell::Goal;
+    // Reset id and entities
+    grid.next_id = 0;
+    grid.entities = Vec::new();
 
+    // Add entities to grid
+    let agent_start = grid.agent_start;
+    let enemy_start = grid.enemy_start;
+    let goal_pos = grid.goal_pos;
+    let player_id = spawn_entity(grid, EntityKind::Player, agent_start);
+    let enemy_id = spawn_entity(grid, EntityKind::Enemy, enemy_start);
+    let goal_id = spawn_entity(grid, EntityKind::Goal, goal_pos);
+
+    grid.player_id = Some(player_id)
 }
 
 //-----------------------------------------------------
 // Print Grid
 //-----------------------------------------------------
 pub fn print_grid(grid: &Grid) {
-    for row in &grid.data {
-        for cell in row {
-            print!("{} ", cell);
+
+    for row in 0..grid.height {
+        for col in 0..grid.width {
+
+            let found = grid.entities.iter().find(|e| e.pos == (row, col));
+
+            match found {
+                Some(entity) => {
+                    match entity.kind {
+                        EntityKind::Player => print!("P"),
+                        EntityKind::Enemy  => print!("E"),
+                        EntityKind::Goal   => print!("G"),
+                    }
+                }
+                None => print!("."),
+            }
         }
         println!();
     }
