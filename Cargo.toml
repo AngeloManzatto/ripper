@@ -3,5 +3,10 @@ name = "ripper"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "ripper"
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 rand = "0.8"
+pyo3 = { version = "0.21", features = ["extension-module"] }
