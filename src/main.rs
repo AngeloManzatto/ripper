@@ -145,8 +145,19 @@ fn main() {
             break;
         }
 
+        // Advance player and enemy
         let entity_id = grid.player_id.expect("entity not found");
         let step_result = step(&mut grid, entity_id, action);
+        grid::step_enemy(&mut grid);
+
+        // Collision detection resolution
+        if grid::check_collision(&grid) {
+            grid::reset_grid(&mut grid);
+            println!("GAME OVER!");
+            grid::print_grid(&grid);
+            tick += 1;
+            continue;
+        }
 
         grid::print_grid(&grid);
         println!("Reward: {}, Done: {}", step_result.reward, step_result.done);
