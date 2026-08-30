@@ -5,11 +5,13 @@ use pyo3::prelude::*;
 #[pyclass]
 struct PyGrid {
     grid: grid::Grid,
-    player_id: u32, // convenience — same id grid.player_id already tracks
+    player_id: u32,
 }
 
 #[pymethods]
 impl PyGrid {
+
+    // Initialize grid
     #[new]
     fn new() -> Self {
         let config = grid::GridConfig {
@@ -22,8 +24,28 @@ impl PyGrid {
         PyGrid { grid: g, player_id }
     }
 
+    // Step
+    fn step(&mut self, action: &str) -> PyResult<(f64, bool)> {
+        let parsed_action = match action {
+            "up"    => grid::Action::Up,
+            "down"  => grid::Action::Down,
+            "left"  => grid::Action::Left,
+            "right" => grid::Action::Right,
+            _ => return Err(pyo3::exceptions::PyValueError::new_err("invalid action")),
+        };
+
+        let result = grid::step(&mut self.grid, self.player_id, parsed_action);
+        Ok((result.reward, result.done))
+    }
+
+    // Reset grid
     fn reset(&mut self) {
         grid::reset_grid(&mut self.grid);
+    }
+
+    // Get current observation
+    fn observation(&self) -> Vec<Vec<Vec<f64>>> {
+        grid::get_observation(&self.grid)
     }
 }
 

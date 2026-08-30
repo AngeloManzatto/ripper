@@ -34,6 +34,27 @@ pub struct GridConfig {
     pub enemy_start: (usize, usize),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    Up,
+    Down,
+    Left,
+    Right,
+    Reset,
+    Exit,
+}
+
+
+#[derive(Debug)]
+pub struct StepResult {
+    pub position: (
+        usize, usize
+    ),
+    pub reward: f64,
+    pub done: bool
+}
+
+
 //-----------------------------------------------------
 // Grid
 //-----------------------------------------------------
@@ -162,6 +183,48 @@ pub fn print_grid(grid: &Grid) {
 }
 
 //-----------------------------------------------------
+// Step Function
+//-----------------------------------------------------
+
+pub fn step(grid: &mut Grid, entity_id: u32, action: Action) -> StepResult {
+
+    // Find the entity's CURRENT position by id.
+    // Hint: grid.entities.iter().find(|e| e.id == entity_id) — same pattern as print_grid,
+    // but this time you also need its .pos, and you'll need to handle the "not found" case
+    // (for now, .expect("entity not found") is fine — a real recovery strategy can come later)
+    let entity = grid.entities.iter().find(|e| e.id == entity_id).expect("entity not found");
+    let current_pos: (usize, usize) = entity.pos;
+
+    // Figure out the new row/col based on `action` — same logic as before,
+    // but working with (usize, usize) tuples instead of Position now
+    let new_pos: (usize, usize) = match action {
+        Action::Up    => (if current_pos.0 > 0 {current_pos.0 - 1 } else {current_pos.0}, current_pos.1),
+        Action::Down  => (if current_pos.0 < grid.height - 1 {current_pos.0 + 1 } else {current_pos.0}, current_pos.1),
+        Action::Left  => (current_pos.0, if current_pos.1 > 0 {current_pos.1 - 1} else {current_pos.1}),
+        Action::Right => (current_pos.0, if current_pos.1 < grid.width - 1 {current_pos.1 + 1} else {current_pos.1}),
+        Action::Reset => current_pos,
+        Action::Exit  => current_pos,
+    };
+
+    // Check if new_pos lands on any Goal-kind entity — search grid.entities again,
+    // this time for kind == EntityKind::Goal && pos == new_pos
+    let done: bool = grid.entities.iter().any(|e| e.kind == EntityKind::Goal && e.pos == new_pos);
+    let reward: f64 = if done { 1.0 } else { 0.0 };
+
+    // Move the entity
+    if let Some(moving_entity) = grid.entities.iter_mut().find(|e| e.id == entity_id) {
+        moving_entity.pos = new_pos;
+    }
+
+    StepResult {
+        position: new_pos,
+        reward,
+        done,
+    }
+}
+
+
+//-----------------------------------------------------
 // Enemy Step
 //-----------------------------------------------------
 pub fn step_enemy(grid: &mut Grid)
@@ -202,4 +265,25 @@ pub fn check_collision(grid: &Grid) -> bool {
     let enemy_pos = grid.entities.iter().find(|e| e.id == enemy_id).expect("Enemy not found!").pos;
 
     player_pos == enemy_pos
+}
+
+//-----------------------------------------------------
+// Get observation
+//-----------------------------------------------------
+pub fn get_observation(grid: &Grid) -> Vec<Vec<Vec<f64>>> {
+    let mut observation = vec![
+        vec![vec![0.0; grid.width]; grid.height]; // Player channel
+        3 // 3 channels total
+    ];
+
+    for entity in &grid.entities {
+        let channel = match entity.kind {
+            EntityKind::Player => 0,
+            EntityKind::Enemy  => 1,
+            EntityKind::Goal   => 2,
+        };
+        observation[channel][entity.pos.0][entity.pos.1] = 1.0;
+    }
+
+    observation
 }
