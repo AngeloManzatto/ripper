@@ -3,7 +3,8 @@
 //-----------------------------------------------------
 
 use std::fmt;
-use rand::Rng;
+use rand::{Rng, thread_rng};
+use std::io::Write;
 
 //-----------------------------------------------------
 // Types
@@ -32,6 +33,7 @@ pub struct GridConfig {
     pub agent_start: (usize, usize),
     pub goal_pos: (usize, usize),
     pub enemy_start: (usize, usize),
+    pub enemy_perception_range: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,7 +70,9 @@ pub struct Grid {
     pub goal_pos: (usize, usize),
     pub next_id: u32,
     pub player_id: Option<u32>,
-    pub enemy_id: Option<u32>
+    pub enemy_id: Option<u32>,
+    pub enemy_last_seen_pos: Option<(usize, usize)>,
+    pub enemy_perception_range: usize,
 }
 
 impl fmt::Display for Cell {
@@ -121,6 +125,8 @@ pub fn create_grid(width: usize, height: usize, config: GridConfig) -> Grid {
         next_id: 0,
         player_id: None,
         enemy_id: None,
+        enemy_last_seen_pos: None,
+        enemy_perception_range: config.enemy_perception_range,
     };
 
     // Add entities to grid
@@ -155,31 +161,96 @@ pub fn reset_grid(grid: &mut Grid) {
 
     grid.player_id = Some(player_id);
     grid.enemy_id = Some(enemy_id);
+    grid.enemy_last_seen_pos = None;
 }
 
 //-----------------------------------------------------
 // Print Grid
 //-----------------------------------------------------
 pub fn print_grid(grid: &Grid) {
+    let enemy_pos = grid.entities.iter().find(|e| e.kind == EntityKind::Enemy).map(|e| e.pos);
 
     for row in 0..grid.height {
         for col in 0..grid.width {
-
             let found = grid.entities.iter().find(|e| e.pos == (row, col));
 
             match found {
-                Some(entity) => {
-                    match entity.kind {
-                        EntityKind::Player => print!("P"),
-                        EntityKind::Enemy  => print!("E"),
-                        EntityKind::Goal   => print!("G"),
-                    }
+                Some(entity) => match entity.kind {
+                    EntityKind::Player => print!("P"),
+                    EntityKind::Enemy  => print!("E"),
+                    EntityKind::Goal   => print!("G"),
+                },
+                None => {
+                    let in_range = enemy_pos.map_or(false, |(er, ec)| {
+                        let dist = (row as i32 - er as i32).abs() + (col as i32 - ec as i32).abs();
+                        dist <= grid.enemy_perception_range as i32
+                    });
+                    if in_range { print!(",") } else { print!(".") }
                 }
-                None => print!("."),
             }
         }
         println!();
     }
+    println!();
+    std::io::stdout().flush().unwrap();
+}
+
+//-----------------------------------------------------
+// Clamp Move 
+//-----------------------------------------------------
+pub fn clamp_move(grid: &Grid, pos: (usize, usize), delta: (i32, i32)) -> (usize, usize) {
+
+    // Execute clamping boudaries
+    let row = (pos.0 as i32 + delta.0).clamp(0, grid.height as i32 - 1);
+    let col = (pos.1 as i32 + delta.1).clamp(0, grid.width as i32 - 1);
+
+    // Cast to usize
+    (row as usize, col as usize)
+}
+
+//-----------------------------------------------------
+// Random step
+//-----------------------------------------------------
+fn random_step(grid: &Grid, pos: (usize, usize)) -> (usize, usize) {
+    
+    // Random action
+    let action = rand::thread_rng().gen_range(0..4);
+
+    // Select delta
+    let delta = match action {
+        0 => (-1, 0),
+        1 => (1, 0),
+        2 => (0, -1),
+        3 => (0, 1),
+        _ => (0,0),
+    };
+
+    // New position making sure it clamps to the grid
+    let new_pos = clamp_move(grid, pos, delta);
+    new_pos
+}
+
+//-----------------------------------------------------
+// Chase delta
+//-----------------------------------------------------
+fn chase_delta(from: (usize, usize), target: (usize, usize)) -> (i32, i32) {
+    
+    let (row, col) = from;
+    let (target_row, target_col) = target;
+
+    let row_diff = row as i32 - target_row as i32;
+    let col_diff = col as i32 - target_col as i32;
+    let mut delta = (0, 0);
+
+    if row_diff == 0 && col_diff == 0 { return delta; }
+
+    if row_diff.abs() >= col_diff.abs() && row_diff != 0 {
+        if row_diff > 0 { delta = (-1, 0) } else { delta = (1, 0) }
+    } else {
+        if col_diff > 0 { delta = (0, -1) } else { delta = (0, 1) }
+    }
+
+    delta
 }
 
 //-----------------------------------------------------
@@ -227,31 +298,36 @@ pub fn step(grid: &mut Grid, entity_id: u32, action: Action) -> StepResult {
 //-----------------------------------------------------
 // Enemy Step
 //-----------------------------------------------------
-pub fn step_enemy(grid: &mut Grid)
-{
-    // Find enemy enetity
+
+pub fn step_enemy(grid: &mut Grid) {
     let enemy_id = grid.enemy_id.expect("No enemy id set!");
-    let enemy = grid.entities.iter().find(|e| e.id == enemy_id).expect("No enemy entity found!");
-    let current_pos: (usize, usize) = enemy.pos;
+    let player_id = grid.player_id.expect("No player id set!");
 
-    // Select random action (UP - 0, DOWN - 1, LEFT - 2, RIGHT - 3)
-    let mut rng = rand::thread_rng();
-    let direction = rng.gen_range(0..4); // 0, 1, 2, or 3
+    let enemy_pos = grid.entities.iter().find(|e| e.id == enemy_id).expect("No enemy entity found!").pos;
+    let player_pos = grid.entities.iter().find(|e| e.id == player_id).expect("No player entity found!").pos;
 
-    // Computes new position
-    let new_position = match direction {
-        0 => (if current_pos.0 > 0 {current_pos.0 - 1 } else {current_pos.0}, current_pos.1),
-        1 => (if current_pos.0 < grid.height - 1 {current_pos.0 + 1 } else {current_pos.0}, current_pos.1),
-        2 => (current_pos.0, if current_pos.1 > 0 {current_pos.1 - 1} else {current_pos.1}),
-        3 => (current_pos.0, if current_pos.1 < grid.width - 1 {current_pos.1 + 1} else {current_pos.1}),
-        _ => current_pos
+    let distance = (enemy_pos.0 as i32 - player_pos.0 as i32).abs()
+                 + (enemy_pos.1 as i32 - player_pos.1 as i32).abs();
+
+    if distance <= grid.enemy_perception_range as i32 {
+        grid.enemy_last_seen_pos = Some(player_pos);
+    }
+
+    let new_position = if let Some(target_pos) = grid.enemy_last_seen_pos {
+        if enemy_pos == target_pos {
+            grid.enemy_last_seen_pos = None;
+            random_step(grid, enemy_pos)
+        } else {
+            let delta = chase_delta(enemy_pos, target_pos);
+            clamp_move(grid, enemy_pos, delta)
+        }
+    } else {
+        random_step(grid, enemy_pos)
     };
 
-    // Update enemy position
     if let Some(moving_entity) = grid.entities.iter_mut().find(|e| e.id == enemy_id) {
-        moving_entity.pos = new_position
-    };
-
+        moving_entity.pos = new_position;
+    }
 }
 
 //-----------------------------------------------------

@@ -43,7 +43,8 @@ fn main() {
     let agent_start =  (0, 0);
     let goal_pos = (GRID_SIZE - 1, GRID_SIZE - 1);
     let enemy_start = (5, 5);
-    let config = grid::GridConfig{agent_start, goal_pos, enemy_start };
+    let enemy_perception_range = 3;
+    let config = grid::GridConfig{agent_start, goal_pos, enemy_start, enemy_perception_range};
     let mut grid: grid::Grid = grid::create_grid(GRID_SIZE, GRID_SIZE, config);
 
     grid::print_grid(&grid);

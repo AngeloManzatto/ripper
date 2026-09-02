@@ -18,6 +18,7 @@ impl PyGrid {
             agent_start: (0, 0),
             goal_pos: (9, 9),
             enemy_start: (5, 5),
+            enemy_perception_range: 3
         };
         let g = grid::create_grid(10, 10, config);
         let player_id = g.player_id.expect("no player id");
@@ -35,6 +36,12 @@ impl PyGrid {
         };
 
         let result = grid::step(&mut self.grid, self.player_id, parsed_action);
+        grid::step_enemy(&mut self.grid);
+
+        if grid::check_collision(&self.grid) {
+            return Ok((-1.0, true));
+        }
+        
         Ok((result.reward, result.done))
     }
 
@@ -46,6 +53,17 @@ impl PyGrid {
     // Get current observation
     fn observation(&self) -> Vec<Vec<Vec<f64>>> {
         grid::get_observation(&self.grid)
+    }
+
+    fn render(&self) {
+        grid::print_grid(&self.grid);
+    }
+
+    fn __repr__(&self) -> String {
+        let player_pos = self.grid.entities.iter()
+            .find(|e| e.id == self.player_id)
+            .map(|e| e.pos);
+        format!("<PyGrid player_pos={:?}>", player_pos)
     }
 }
 
