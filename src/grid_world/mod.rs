@@ -1,6 +1,9 @@
 //-----------------------------------------------------
-// Modules
+// Libraries
 //-----------------------------------------------------
 
-pub mod grid_world;
-pub mod python;
+pub mod entity;
+pub mod action;
+pub mod world;
+pub mod layout;
+pub mod environment;

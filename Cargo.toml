@@ -9,4 +9,5 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rand = "0.8"
-pyo3 = { version = "0.21", features = ["extension-module"] }
+macroquad = "0.4"
+pyo3 = { version = "0.28.2", features = ["extension-module"] }
