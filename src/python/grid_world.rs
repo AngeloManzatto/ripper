@@ -5,11 +5,36 @@
 use pyo3::prelude::*;
 use std::collections::HashMap;
 
-use crate::grid_world::world::{Observation, StepResult};
+use crate::grid_world::entity::EntityKind;
+use crate::grid_world::world::{self, Observation, EndReason, StepResult, get_entity_ids_by_kind};
 use crate::grid_world::world::World;
 use crate::grid_world::environment::Environment;
 use crate::grid_world::action::Action;
 use crate::grid_world::layout::parse_layout;
+
+//-----------------------------------------------------
+// Step Result
+//-----------------------------------------------------
+
+#[pyclass(name = "EndReason", eq, eq_int, from_py_object)]
+#[derive(Clone, Copy, PartialEq)]
+pub enum PyEndReason {
+    GoalReached,
+    Caught,
+    Trapped,
+    Timeout,
+}
+
+impl From<EndReason> for PyEndReason {
+    fn from(reason: EndReason) -> Self {
+        match reason {
+            EndReason::GoalReached => PyEndReason::GoalReached,
+            EndReason::Caught      => PyEndReason::Caught,
+            EndReason::Trapped     => PyEndReason::Trapped,
+            EndReason::Timeout     => PyEndReason::Timeout,
+        }
+    }
+}
 
 //-----------------------------------------------------
 // Action
@@ -67,12 +92,12 @@ pub struct PyStepResult {
     #[pyo3(get)]
     pub done: bool,
     #[pyo3(get)]
-    pub reason: Option<String>, 
+    pub reason: Option<PyEndReason>,
 }
 
 impl From<StepResult> for PyStepResult {
     fn from(result: StepResult) -> Self {
-        let reason = result.reason.map(|r| format!("{:?}", r)); // uses EndReason's Debug derive
+        let reason = result.reason.map(|r| r.into());
         PyStepResult { done: result.done, reason }
     }
 }
@@ -93,6 +118,20 @@ impl PyWorld {
         PyWorld { world }
     }
 
+    fn get_grid_shape(&self) ->(usize, usize) {
+        (self.world.width, self.world.height)
+    }
+
+    fn get_player_id(&self) -> u32 {
+        *get_entity_ids_by_kind(&self.world, EntityKind::Player)
+            .first()
+            .expect("no player entity found")
+    }
+
+    fn get_enemies_ids(&self) -> Vec<u32> {
+        get_entity_ids_by_kind(&self.world, EntityKind::Enemy)
+    }
+
     fn reset(&mut self) {
         self.world.reset();
     }
@@ -108,5 +147,19 @@ impl PyWorld {
 
     fn observation(&self) -> PyObservation {
         self.world.observation().into()
+    }
+
+    fn print_world(&self) {
+        world::print_world(&self.world);
+    }
+
+    fn __repr__(&self) -> String {
+        let player_id = get_entity_ids_by_kind(&self.world, EntityKind::Player).first().copied();
+        format!("<PyWorld width={} height={} tick={} done={} player_id={:?}>",
+            self.world.width, self.world.height, self.world.tick, self.world.done, player_id)
+    }
+
+    fn __str__(&self) -> String {
+        world::render_world(&self.world)
     }
 }

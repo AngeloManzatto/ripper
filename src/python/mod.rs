@@ -19,5 +19,7 @@ fn ripper(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<grid_world::PyWorld>()?;
     m.add_class::<grid_world::PyObservation>()?;
     m.add_class::<grid_world::PyStepResult>()?;
+    m.add_class::<grid_world::PyEndReason>()?;
+    m.add_class::<grid_world::PyAction>()?;
     Ok(())
 }

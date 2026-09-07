@@ -9,7 +9,7 @@ Created on Tue Sep  1 08:00:05 2026
 ###############################################################################
 
 from pathlib import Path
-
+import textwrap
 import random
 import ripper
 
@@ -18,11 +18,14 @@ import torch.nn as nn
 
 from collections import deque
 
+from ripper import Action
+from ripper import EndReason
+
 ###############################################################################
 # Globals
 ###############################################################################
 
-ACTIONS = ["up", "down", "left", "right"]
+ACTIONS = [Action.Up, Action.Down, Action.Left, Action.Right]
 
 ###############################################################################
 # Files and folders
@@ -56,23 +59,23 @@ class ReplayBuffer:
 ###############################################################################
 
 class DDQN(nn.Module):
-    def __init__(self, grid_size=10, n_actions=4):
+    def __init__(self, height=8, width=10, n_actions=4, channels=5):
         super().__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(3, 16, kernel_size=3, padding=1),
+            nn.Conv2d(channels, 16, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(16, 32, kernel_size=3, padding=1),
             nn.ReLU(),
         )
         self.fc = nn.Sequential(
-            nn.Linear(32 * grid_size * grid_size, 128),
+            nn.Linear(32 * height * width, 128),
             nn.ReLU(),
             nn.Linear(128, n_actions),
         )
 
     def forward(self, x):
         x = self.conv(x)
-        x = x.view(x.size(0), -1)  # flatten
+        x = x.view(x.size(0), -1)
         x = self.fc(x)
         return x
 
@@ -97,7 +100,8 @@ def choose_action(state, epsilon, policy_net, device):
         action = q_values.argmax(dim=1).item()
     
     return action
-    
+
+
 ###############################################################################
 # Tensor utils 
 ###############################################################################
@@ -148,13 +152,30 @@ def train_step(policy_net, target_net, batch, optimizer, loss_fn, device, gamma=
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-g = ripper.PyGrid()
+max_tick = 100
+
+layout = textwrap.dedent("""
+        ##########
+        #P...#...#
+        #....#...#
+        #........#
+        #...##..G#
+        #...T....#
+        #......E.#
+        ##########
+        """).strip()
+
+g = ripper.PyWorld(layout, max_tick)
+player_id = g.get_player_id()
+
 replay_buffer = ReplayBuffer(capacity=10000)
 
-policy_net = DDQN().to(device)
-target_net = DDQN().to(device)
+height, width = g.get_grid_shape()
+policy_net = DDQN(height=height, width=width).to(device)
+target_net = DDQN(height=height, width=width).to(device)
 target_net.load_state_dict(policy_net.state_dict())
 target_net.eval()
+
 
 optimizer = torch.optim.Adam(policy_net.parameters(), lr=0.0001)
 loss_fn = nn.MSELoss()
@@ -166,12 +187,12 @@ epsilon_decay = 0.9999
 batch_size = 128
 min_buffer_size = 1000   # don't train until the buffer has real diversity
 target_update_freq = 500  # sync target_net every N training steps
-max_steps_per_episode = 200
 
-episodes = 5000
+episodes = 10000
 train_step_count = 0
 
 recent_rewards = deque(maxlen=100)
+recent_reasons = deque(maxlen=100)
 
 # Reload weights
 
@@ -184,17 +205,28 @@ if checkpoint_path.exists():
 
 for episode in range(episodes):
     g.reset()
-    state = g.observation()
+    observation = g.observation()
     done = False
     total_reward = 0
 
-    for t in range(max_steps_per_episode):
-        action_idx = choose_action(state, epsilon, policy_net, device)
-        reward, done = g.step(ACTIONS[action_idx])
-        next_state = g.observation()
+    while not done:
+        action_idx = choose_action(observation.grid, epsilon, policy_net, device)
+        
+        step_result = g.step({player_id : ACTIONS[action_idx]})
+        
+        done, reason = step_result.done, step_result.reason
+        reward = 0.0
 
-        replay_buffer.push(state, action_idx, reward, next_state, done)
-        state = next_state
+        if reason == EndReason.GoalReached:
+            reward = 1.0
+        elif reason in (EndReason.Caught, EndReason.Trapped, EndReason.Timeout):
+            reward = -1.0
+        
+        
+        next_observation = g.observation()
+
+        replay_buffer.push(observation.grid, action_idx, reward, next_observation.grid, done)
+        observation = next_observation
         total_reward += reward
 
         if len(replay_buffer) >= min_buffer_size:
@@ -211,14 +243,15 @@ for episode in range(episodes):
             if train_step_count % target_update_freq == 0:
                 target_net.load_state_dict(policy_net.state_dict())
 
-        if done:
-            break
-    
     recent_rewards.append(total_reward)
+    recent_reasons.append(str(reason))
     
     if episode % 50 == 0 and len(recent_rewards) >= 100:
         avg_reward = sum(recent_rewards) / len(recent_rewards)
-        print(f"Episode {episode}, avg_reward(last 100): {avg_reward:.3f}, epsilon: {epsilon:.3f}")
+        win_rate = recent_reasons.count("EndReason.GoalReached") / len(recent_reasons)
+        
+        print(f"Episode {episode}, avg_reward(last 100): {avg_reward:.3f}, "
+              f"win_rate(last 100): {win_rate:.2%}, epsilon: {epsilon:.3f}")
     
         # Periodic checkpoint — always overwrite, so you can resume from the latest state
         torch.save(policy_net.state_dict(), checkpoint_path)
@@ -233,36 +266,52 @@ for episode in range(episodes):
 # Evaluation
 ###############################################################################
 
-def evaluate(g, policy_net, device, max_steps=50, render=True):
+def evaluate(g, policy_net, device, render=True):
     g.reset()
-    state = g.observation()
+    player_id = g.get_player_id()
+    observation = g.observation()
     
-    path = [state]
+    path = []
     
     if render:
-        g.render()
+        g.print_world()
     
-    for step_num in range(max_steps):
+    reason = None
+    done = False
+    step_num = 1
+    while not done:
         with torch.no_grad():
-            state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(device)
+            state_tensor = torch.tensor(observation.grid, dtype=torch.float32).unsqueeze(0).to(device)
             q_values = policy_net(state_tensor)
             action_idx = q_values.argmax(dim=1).item()
         
-        reward, done = g.step(ACTIONS[action_idx])
-        next_state = g.observation()
+        step_result = g.step({player_id : ACTIONS[action_idx]})
         
-        path.append(next_state)
-        state = next_state
+        done, reason = step_result.done, step_result.reason
+        
+        next_observation = g.observation()
+        
+        path.append(ACTIONS[action_idx])
+        observation = next_observation
         
         if render:
-            g.render()
+            g.print_world()
+            
+        step_num += 1
         
-        if done:
-            print(f"Episode ended in {step_num + 1} steps, reward: {reward}")
-            break
-    else:
-        print(f"Did not finish within {max_steps} steps.")
-    
-    return path
+    if render:
+        print(f"Finished the game in {step_num} steps for the following reason: {reason}")
+        print("Path:", path)
+    return path, reason
 
-path = evaluate(g, policy_net.eval(), device, max_steps = 100)
+reasons = {}
+
+for i in range(1000):
+
+    path, reason = evaluate(g, policy_net.eval(), device, render=False)
+    
+    reasons[str(reason)] = reasons.get(str(reason), 0) + 1
+   
+print(reasons)
+
+path, reason = evaluate(g, policy_net, device, render=True)

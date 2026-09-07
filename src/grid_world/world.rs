@@ -295,34 +295,41 @@ pub fn check_trap_collision(world: &World, entity_id: u32) -> bool {
     })
 }
 
-
 //-----------------------------------------------------
 // Print world
 //-----------------------------------------------------
 
-pub fn print_world(world: &World) {
+pub fn render_world(world: &World) -> String {
+    let mut output = String::new();
+
     for row in 0..world.height {
         for col in 0..world.width {
             let found_id = world.positions.iter()
                 .find(|(_, pos)| **pos == (row, col))
                 .map(|(id, _)| *id);
-            
-            match found_id {
+
+            let ch = match found_id {
                 Some(id) => {
                     let kind = world.kinds.get(&id).expect("entity has no kind");
                     match kind {
-                        EntityKind::Player => print!("P"),
-                        EntityKind::Enemy  => print!("E"),
-                        EntityKind::Goal   => print!("G"),
-                        EntityKind::Wall   => print!("#"),
-                        EntityKind::Trap   => print!("T"),
+                        EntityKind::Player => 'P',
+                        EntityKind::Enemy  => 'E',
+                        EntityKind::Goal   => 'G',
+                        EntityKind::Wall   => '#',
+                        EntityKind::Trap   => 'T',
                     }
                 }
-                None => print!("."),
-            }
+                None => '.',
+            };
+            output.push(ch);
         }
-        println!();
+        output.push('\n');
     }
-    println!();
+
+    output
+}
+
+pub fn print_world(world: &World) {
+    print!("{}", render_world(world));
     std::io::stdout().flush().unwrap();
 }

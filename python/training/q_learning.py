@@ -10,12 +10,16 @@ Created on Sat Aug 29 07:26:26 2026
 
 import random
 import ripper
+import textwrap
+
+from ripper import Action
+from ripper import EndReason
 
 ###############################################################################
 # Globals
 ###############################################################################
 
-ACTIONS = ["up", "down", "left", "right"]
+ACTIONS = [Action.Up, Action.Down, Action.Left, Action.Right]
 
 ###############################################################################
 # Q Learning (# maps (row, col) -> [q_up, q_down, q_left, q_right])
@@ -32,10 +36,10 @@ def get_entity_pos(obs, entitiy_kind="player"):
     # channel 0 -> Player, # channel 1 -> Enemy, channel 2 -> Goal
     
     if entitiy_kind == "player":
-        grid = obs[0]
+        grid = obs.grid[0]
         
     elif entitiy_kind == "enemy":
-        grid = obs[1]
+        grid = obs.grid[1]
         
     else:
         raise Exception(f'player or enemy entity kind allower, but found: {entitiy_kind}')
@@ -60,7 +64,7 @@ def get_entity_pos(obs, entitiy_kind="player"):
 # Choose and action based on q value
 def choose_action(state, epsilon):
     if random.random() < epsilon:
-        return random.randint(0, 3)  # explore
+        return random.randint(0, 3)
     else:
         q_values = get_q(state)
         return q_values.index(max(q_values))  # exploit — best known action
@@ -81,17 +85,34 @@ def update_q(state, action, reward, next_state, done, alpha=0.1, gamma=0.99):
 
 Q = {}  
 
-g = ripper.PyGrid()
+max_tick = 100
+
+layout = textwrap.dedent("""
+        ##########
+        #P.......#
+        #....#...#
+        #....#...#
+        #....#..G#
+        #........#
+        #......E.#
+        ##########
+        """).strip()
+
+g = ripper.PyWorld(layout, max_tick)
+
+
 epsilon = 0.8
 epsilon_start = 1.0
 epsilon_min = 0.05
 epsilon_decay = 0.999  # multiply epsilon by this after every episode
-episodes = 50000
+episodes = 2000
 step = 0
 
 for episode in range(episodes):
     g.reset()
     obs = g.observation()
+    player_id = obs.player_id
+    
     player_pos = get_entity_pos(obs, "player")
     enemy_pos  = get_entity_pos(obs, "enemy")
     state = (player_pos, enemy_pos)
@@ -101,7 +122,16 @@ for episode in range(episodes):
     while not done:
         
         action_idx = choose_action(state, epsilon)
-        reward, done = g.step(ACTIONS[action_idx])
+        step_result = g.step({player_id : ACTIONS[action_idx]})
+        
+        done, reason = step_result.done, step_result.reason
+        reward = 0.0
+
+        if reason == EndReason.GoalReached:
+            reward = 1.0
+        elif reason in (EndReason.Caught, EndReason.Trapped, EndReason.Timeout):
+            reward = -1.0
+      
         
         next_obs = g.observation()
         player_pos = get_entity_pos(next_obs, "player")
@@ -113,9 +143,6 @@ for episode in range(episodes):
         
         state = next_state
         total_reward += reward
-        
-        if step % 100000 == 0:
-            print(action_idx, step, next_state)
         
         step +=1
     
@@ -129,22 +156,30 @@ for episode in range(episodes):
 # Evaluation
 ###############################################################################
 
-def evaluate(g, Q, max_steps=50):
+def evaluate(g, Q):
     g.reset()
     obs = g.observation()
+    
+    player_id = obs.player_id
+    
     player_pos = get_entity_pos(obs, "player")
     enemy_pos  = get_entity_pos(obs, "enemy")
     state = (player_pos, enemy_pos)
     
     path = [state]
     
-    g.render()
+    g.print_world()
     
-    for step_num in range(max_steps):
+    done = False
+
+    step_num = 1
+    while not done:
         q_values = get_q(state)  # uses existing Q dict
         action_idx = q_values.index(max(q_values))
         
-        reward, done = g.step(ACTIONS[action_idx])
+        step_result = g.step({player_id : ACTIONS[action_idx]})
+        
+        done, reason = step_result.done, step_result.reason or ""
         
         next_obs = g.observation()
         player_pos = get_entity_pos(next_obs, "player")
@@ -155,15 +190,13 @@ def evaluate(g, Q, max_steps=50):
         path.append(next_state)
         state = next_state
         
-        g.render()
+        g.print_world()
         
-        if done:
-            print(f"Reached goal in {step_num + 1} steps!")
-            break
-    else:
-        print(f"Did not reach goal within {max_steps} steps.")
-    
+        step_num +=1
+        
+  
+    print(f"Finished the game in {step_num} steps for the following reason: {reason}")
     print("Path:", path)
     return path
 
-evaluate(g, Q, 100)
+evaluate(g, Q)
