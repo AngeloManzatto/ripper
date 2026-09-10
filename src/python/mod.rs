@@ -21,5 +21,9 @@ fn ripper(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<grid_world::PyStepResult>()?;
     m.add_class::<grid_world::PyEndReason>()?;
     m.add_class::<grid_world::PyAction>()?;
+    m.add_class::<grid_world::PyGenerationConfig>()?;
+    m.add_class::<grid_world::PyMutationConfig>()?;
+    m.add_function(wrap_pyfunction!(grid_world::generate_valid_layout_py, m)?)?;
+    m.add_function(wrap_pyfunction!(grid_world::mutate_valid_layout_py, m)?)?;
     Ok(())
 }

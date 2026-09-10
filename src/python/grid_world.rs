@@ -10,7 +10,155 @@ use crate::grid_world::world::{self, Observation, EndReason, StepResult, get_ent
 use crate::grid_world::world::World;
 use crate::grid_world::environment::Environment;
 use crate::grid_world::action::Action;
-use crate::grid_world::layout::parse_layout;
+use crate::grid_world::layout;
+
+//-----------------------------------------------------
+// Layout Generate Config
+//-----------------------------------------------------
+
+#[pyclass(name = "GenerationConfig")]
+pub struct PyGenerationConfig {
+     #[pyo3(get)]
+    pub width: usize,
+     #[pyo3(get)]
+    pub height: usize,
+     #[pyo3(get)]
+    pub wall_density: f64,
+     #[pyo3(get)]
+    pub num_enemies: usize,
+     #[pyo3(get)]
+    pub num_traps: usize,
+}
+
+#[pymethods]
+impl PyGenerationConfig {
+    #[new]
+    #[pyo3(signature = (
+        width=None,
+        height=None,
+        wall_density=None,
+        num_enemies=None,
+        num_traps=None,
+    ))]
+    fn new(
+        width: Option<usize>,
+        height: Option<usize>,
+        wall_density: Option<f64>,
+        num_enemies: Option<usize>,
+        num_traps: Option<usize>,
+    ) -> Self {
+        let defaults = layout::GenerationConfig::default();
+        PyGenerationConfig {
+            width: width.unwrap_or(defaults.width),
+            height: height.unwrap_or(defaults.height),
+            wall_density: wall_density.unwrap_or(defaults.wall_density),
+            num_enemies: num_enemies.unwrap_or(defaults.num_enemies),
+            num_traps: num_traps.unwrap_or(defaults.num_traps),
+        }
+    }
+}
+
+impl From<&PyGenerationConfig> for layout::GenerationConfig {
+    fn from(config: &PyGenerationConfig) -> Self {
+        layout::GenerationConfig {
+            width: config.width,
+            height: config.height,
+            wall_density: config.wall_density,
+            num_enemies: config.num_enemies,
+            num_traps: config.num_traps,
+        }
+    }
+}
+
+//-----------------------------------------------------
+// Layout Mutation Config
+//-----------------------------------------------------
+
+#[pyclass(name = "MutationConfig")]
+pub struct PyMutationConfig {
+    #[pyo3(get)]
+    pub cells_per_mutation: usize,
+    #[pyo3(get)]
+    pub max_wall_density: f64,
+    #[pyo3(get)]
+    pub max_enemies: u32,
+    #[pyo3(get)]
+    pub max_traps: u32,
+    #[pyo3(get)]
+    pub wall_weight: f64,
+    #[pyo3(get)]
+    pub enemy_weight: f64,
+    #[pyo3(get)]
+    pub trap_weight: f64,
+}
+
+#[pymethods]
+impl PyMutationConfig {
+    #[new]
+    #[pyo3(signature = (
+        cells_per_mutation=None,
+        max_wall_density=None,
+        max_enemies=None,
+        max_traps=None,
+        wall_weight=None,
+        enemy_weight=None,
+        trap_weight=None,
+    ))]
+    fn new(
+        cells_per_mutation: Option<usize>,
+        max_wall_density: Option<f64>,
+        max_enemies: Option<u32>,
+        max_traps: Option<u32>,
+        wall_weight: Option<f64>,
+        enemy_weight: Option<f64>,
+        trap_weight: Option<f64>,
+    ) -> Self {
+        let defaults = layout::MutationConfig::default();
+        PyMutationConfig {
+            cells_per_mutation: cells_per_mutation.unwrap_or(defaults.cells_per_mutation),
+            max_wall_density: max_wall_density.unwrap_or(defaults.max_wall_density),
+            max_enemies: max_enemies.unwrap_or(defaults.max_enemies),
+            max_traps: max_traps.unwrap_or(defaults.max_traps),
+            wall_weight: wall_weight.unwrap_or(defaults.wall_weight),
+            enemy_weight: enemy_weight.unwrap_or(defaults.enemy_weight),
+            trap_weight: trap_weight.unwrap_or(defaults.trap_weight),
+        }
+    }
+}
+
+impl From<&PyMutationConfig> for layout::MutationConfig {
+    fn from(config: &PyMutationConfig) -> Self {
+        layout::MutationConfig {
+            cells_per_mutation: config.cells_per_mutation,
+            max_wall_density: config.max_wall_density,
+            max_enemies: config.max_enemies,
+            max_traps: config.max_traps,
+            wall_weight: config.wall_weight,
+            enemy_weight: config.enemy_weight,
+            trap_weight: config.trap_weight,
+        }
+    }
+}
+
+//-----------------------------------------------------
+// Generate Valid Layout
+//-----------------------------------------------------
+
+#[pyfunction]
+pub fn generate_valid_layout_py(config: &PyGenerationConfig, max_attempts: u32) -> String {
+    let rust_config: layout::GenerationConfig = config.into();
+    layout::generate_valid_layout(&rust_config, max_attempts)
+}
+
+//-----------------------------------------------------
+// Mutate Valid Layout
+//-----------------------------------------------------
+
+#[pyfunction]
+pub fn mutate_valid_layout_py(layout_str: String, config: &PyMutationConfig, max_attempts: u32) -> String {
+    let rust_config: layout::MutationConfig = config.into();
+    layout::mutate_valid_layout(&layout_str, &rust_config, max_attempts)
+}
 
 //-----------------------------------------------------
 // Step Result
@@ -114,7 +262,7 @@ pub struct PyWorld {
 impl PyWorld {
     #[new]
     fn new(layout: &str, max_tick: u32) -> Self {
-        let world = parse_layout(layout, max_tick);
+        let world = layout::parse_layout(layout, max_tick);
         PyWorld { world }
     }
 
