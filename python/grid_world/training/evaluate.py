@@ -12,6 +12,7 @@ import torch
 
 import ripper
 from ripper import Action
+from collections import Counter
 
 ###############################################################################
 # Globals
@@ -27,7 +28,8 @@ def evaluate(agent, layout, max_tick=100, episodes=20):
     world = ripper.PyWorld(layout, max_tick)
     player_id = world.get_player_id()
     wins = 0
-
+    outcomes = []
+    
     for _ in range(episodes):
         world.reset()
         observation = world.observation()
@@ -45,5 +47,14 @@ def evaluate(agent, layout, max_tick=100, episodes=20):
 
         if reason == ripper.EndReason.GoalReached:
             wins += 1
+        
+        outcomes.append(str(reason))
 
-    return wins / episodes
+    counts = Counter(outcomes)
+    win_rate = counts.get("EndReason.GoalReached", 0) / episodes
+
+    return {
+        "win_rate": win_rate,
+        "episodes": episodes,
+        "outcomes": dict(counts),
+    }

@@ -29,7 +29,7 @@ class Agent:
 # Build agent
 ###############################################################################
 
-def build_agent(height, width, n_actions=4, channels=5, lr=1e-4, device=None):
+def build_agent(width, height, n_actions=4, channels=5, lr=1e-4, device=None):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

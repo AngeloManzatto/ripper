@@ -77,51 +77,74 @@ impl From<&PyGenerationConfig> for layout::GenerationConfig {
 #[pyclass(name = "MutationConfig")]
 pub struct PyMutationConfig {
     #[pyo3(get)]
-    pub cells_per_mutation: usize,
+    pub n_wall_mutations: usize,
     #[pyo3(get)]
     pub max_wall_density: f64,
+
     #[pyo3(get)]
     pub max_enemies: u32,
     #[pyo3(get)]
+    pub enemy_add_weight: f64,
+    #[pyo3(get)]
+    pub enemy_remove_weight: f64,
+    #[pyo3(get)]
+    pub enemy_nothing_weight: f64,
+
+    #[pyo3(get)]
     pub max_traps: u32,
     #[pyo3(get)]
-    pub wall_weight: f64,
+    pub trap_add_weight: f64,
     #[pyo3(get)]
-    pub enemy_weight: f64,
+    pub trap_remove_weight: f64,
     #[pyo3(get)]
-    pub trap_weight: f64,
+    pub trap_nothing_weight: f64,
+
+    #[pyo3(get)]
+    pub n_repositions: usize,
 }
 
 #[pymethods]
 impl PyMutationConfig {
     #[new]
     #[pyo3(signature = (
-        cells_per_mutation=None,
+        n_wall_mutations=None,
         max_wall_density=None,
         max_enemies=None,
+        enemy_add_weight=None,
+        enemy_remove_weight=None,
+        enemy_nothing_weight=None,
         max_traps=None,
-        wall_weight=None,
-        enemy_weight=None,
-        trap_weight=None,
+        trap_add_weight=None,
+        trap_remove_weight=None,
+        trap_nothing_weight=None,
+        n_repositions=None,
     ))]
     fn new(
-        cells_per_mutation: Option<usize>,
+        n_wall_mutations: Option<usize>,
         max_wall_density: Option<f64>,
         max_enemies: Option<u32>,
+        enemy_add_weight: Option<f64>,
+        enemy_remove_weight: Option<f64>,
+        enemy_nothing_weight: Option<f64>,
         max_traps: Option<u32>,
-        wall_weight: Option<f64>,
-        enemy_weight: Option<f64>,
-        trap_weight: Option<f64>,
+        trap_add_weight: Option<f64>,
+        trap_remove_weight: Option<f64>,
+        trap_nothing_weight: Option<f64>,
+        n_repositions: Option<usize>,
     ) -> Self {
         let defaults = layout::MutationConfig::default();
         PyMutationConfig {
-            cells_per_mutation: cells_per_mutation.unwrap_or(defaults.cells_per_mutation),
+            n_wall_mutations: n_wall_mutations.unwrap_or(defaults.n_wall_mutations),
             max_wall_density: max_wall_density.unwrap_or(defaults.max_wall_density),
             max_enemies: max_enemies.unwrap_or(defaults.max_enemies),
+            enemy_add_weight: enemy_add_weight.unwrap_or(defaults.enemy_add_weight),
+            enemy_remove_weight: enemy_remove_weight.unwrap_or(defaults.enemy_remove_weight),
+            enemy_nothing_weight: enemy_nothing_weight.unwrap_or(defaults.enemy_nothing_weight),
             max_traps: max_traps.unwrap_or(defaults.max_traps),
-            wall_weight: wall_weight.unwrap_or(defaults.wall_weight),
-            enemy_weight: enemy_weight.unwrap_or(defaults.enemy_weight),
-            trap_weight: trap_weight.unwrap_or(defaults.trap_weight),
+            trap_add_weight: trap_add_weight.unwrap_or(defaults.trap_add_weight),
+            trap_remove_weight: trap_remove_weight.unwrap_or(defaults.trap_remove_weight),
+            trap_nothing_weight: trap_nothing_weight.unwrap_or(defaults.trap_nothing_weight),
+            n_repositions: n_repositions.unwrap_or(defaults.n_repositions),
         }
     }
 }
@@ -129,13 +152,17 @@ impl PyMutationConfig {
 impl From<&PyMutationConfig> for layout::MutationConfig {
     fn from(config: &PyMutationConfig) -> Self {
         layout::MutationConfig {
-            cells_per_mutation: config.cells_per_mutation,
+            n_wall_mutations: config.n_wall_mutations,
             max_wall_density: config.max_wall_density,
             max_enemies: config.max_enemies,
+            enemy_add_weight: config.enemy_add_weight,
+            enemy_remove_weight: config.enemy_remove_weight,
+            enemy_nothing_weight: config.enemy_nothing_weight,
             max_traps: config.max_traps,
-            wall_weight: config.wall_weight,
-            enemy_weight: config.enemy_weight,
-            trap_weight: config.trap_weight,
+            trap_add_weight: config.trap_add_weight,
+            trap_remove_weight: config.trap_remove_weight,
+            trap_nothing_weight: config.trap_nothing_weight,
+            n_repositions: config.n_repositions,
         }
     }
 }
