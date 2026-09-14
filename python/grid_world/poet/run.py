@@ -8,10 +8,11 @@ Created on Fri Sep 11 07:14:57 2026
 # libraries
 ###############################################################################
 
+from pathlib import Path
 import ripper
 
-from grid_world.training.agent import build_agent
-from grid_world.poet.lineage import run_lineage
+from agents.ddqn.agent import build_agent
+from poet.lineage import run_lineage
 
 ###############################################################################
 # Globals
@@ -20,12 +21,24 @@ from grid_world.poet.lineage import run_lineage
 width  = 16
 height = 16
 
+max_tick=50
 generations = 200
 train_episodes_per_gen = 500
 
 # model
-
 lr = 0.0001
+
+###############################################################################
+# Files and folders
+###############################################################################
+
+model_type = "ddpg"
+
+base_path = Path("checkpoint") / model_type
+base_path.mkdir(parents=True, exist_ok=True)
+
+checkpoint_path  = base_path / "agent_checkpoint.pt"
+archive_path     = base_path / "archive.pkl"
 
 ###############################################################################
 # Configs
@@ -80,10 +93,13 @@ agent, archive = run_lineage(
         seed_layout, 
         generations=generations, 
         mutation_config=mutation_config,
-        train_episodes_per_gen=train_episodes_per_gen, 
-        mc_episodes=20,
+        train_episodes_per_gen=train_episodes_per_gen,
+        max_tick=max_tick,
+        mc_episodes=100,
         mc_min_rate=0.2, 
         mc_max_rate=0.7, 
         mutate_max_attempts=100,
+        checkpoint_path=checkpoint_path, 
+        archive_path=checkpoint_path,
         verbose=True
     )

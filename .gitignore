@@ -1,1 +1,25 @@
+# =========================
+# Python temp
+# =========================
+__pycache__/
+*.py[cod]
+*.pyc
+*$py.class
+
 /target
+
+# =========================
+# Logs
+# =========================
+*.log
+pip-log.txt
+pip-delete-this-directory.txt
+logs
+
+
+# =========================
+# IDEs / Editors
+# =========================
+.vscode/
+.idea/
+*dev*.sh

@@ -8,7 +8,7 @@ Created on Fri Sep 11 17:44:41 2026
 # libraries
 ###############################################################################
 
-from grid_world.training.evaluate import evaluate
+from agents.evaluate import evaluate
 
 ###############################################################################
 # MC evaluation
@@ -18,7 +18,7 @@ def satisfies_minimal_criterion(
         agent, 
         layout, 
         max_tick=100, 
-        episodes=20, 
+        episodes=50, 
         min_rate=0.2, 
         max_rate=0.7
         ):
