@@ -120,6 +120,7 @@ class PPOAgent(BaseAgent):
         gamma=0.99,
         gae_lambda=0.95,
         clip_epsilon=0.2,
+        entropy_coef=0.01,
         epochs_per_update=4,
         batch_size=64,
     ):
@@ -130,6 +131,7 @@ class PPOAgent(BaseAgent):
         self.gamma = gamma
         self.gae_lambda = gae_lambda
         self.clip_epsilon = clip_epsilon
+        self.entropy_coef = entropy_coef
         self.epochs_per_update = epochs_per_update
         self.batch_size = batch_size
 
@@ -215,7 +217,8 @@ class PPOAgent(BaseAgent):
                     dist = Categorical(logits=logits)
             
                     new_log_probs = dist.log_prob(actions_tensor[idx])
-            
+                    entropy = dist.entropy().mean()
+                    
                     ratio = torch.exp(
                         new_log_probs - old_log_probs_tensor[idx]
                     )
@@ -239,7 +242,7 @@ class PPOAgent(BaseAgent):
                         returns_tensor[idx]
                     )
             
-                    loss = policy_loss + 0.5 * critic_loss
+                    loss = policy_loss + 0.5 * critic_loss - self.entropy_coef * entropy 
             
                     self.optimizer.zero_grad()
                     loss.backward()
@@ -285,6 +288,7 @@ def build_ppo_agent(
     gamma=0.99,
     gae_lambda=0.95,
     clip_epsilon=0.2,
+    entropy_coef=0.01,
     epochs_per_update=4,
     batch_size=128,
 ):
@@ -296,6 +300,6 @@ def build_ppo_agent(
 
     return PPOAgent(
         model, optimizer, device,
-        gamma=gamma, gae_lambda=gae_lambda, clip_epsilon=clip_epsilon,
+        gamma=gamma, gae_lambda=gae_lambda, clip_epsilon=clip_epsilon, entropy_coef=entropy_coef,
         epochs_per_update=epochs_per_update, batch_size=batch_size,
     )
