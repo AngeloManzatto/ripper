@@ -9,7 +9,8 @@ use ripper::grid_world::world::{World, get_entity_ids_by_kind};
 use ripper::grid_world::entity::EntityKind;
 use ripper::grid_world::action::Action;
 use ripper::grid_world::environment::Environment;
-use ripper::grid_world::layout::parse_layout;
+use ripper::grid_world::layout;
+use ripper::grid_world::world;
 
 //-----------------------------------------------------
 // Main loop
@@ -17,24 +18,29 @@ use ripper::grid_world::layout::parse_layout;
 
 #[macroquad::main("RIPPER")]
 async fn main() {
-    let layout = "\
-        ##########
-        #P.......#
-        #....#...#
-        #....#...#
-        #...##..G#
-        #...T....#
-        #......E.#
-        ##########";
 
-    let mut world = parse_layout(layout, 100);
-    let player_id = get_entity_ids_by_kind(&world, EntityKind::Player)[0];
+
+    let max_tick = 100;
+    let config = layout::GenerationConfig {
+        width: 16,
+        height: 16,
+        wall_density:0.2,
+        num_enemies:1,
+        num_traps:1,
+        min_player_goal_distance:0
+    };
+
+    let mut world = generate_world(config, max_tick);
+    let mut player_id = get_entity_ids_by_kind(&world, EntityKind::Player)[0];
     
     loop {
         // Clear screen buffer
         clear_background(BLACK);
 
-        if is_key_pressed(KeyCode::R) {world.reset() }
+        if is_key_pressed(KeyCode::R) {
+            world = generate_world(config, max_tick);
+            player_id = get_entity_ids_by_kind(&world, EntityKind::Player)[0];
+        }
         else if is_key_pressed(KeyCode::Q) {break }
 
         // Poll for a key press this frame, map to an Action
@@ -56,6 +62,14 @@ async fn main() {
         // Wait for next frame
         next_frame().await;
     }
+}
+
+fn generate_world(config: layout::GenerationConfig, max_tick:u32) -> world::World
+{
+    let layout   = layout::generate_layout(&config);
+    let mut world = layout::parse_layout(&layout, max_tick);
+    world
+
 }
 
 fn draw_world(world: &World) {

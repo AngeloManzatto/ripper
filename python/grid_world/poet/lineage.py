@@ -72,7 +72,7 @@ def run_lineage(
                 pickle.dump(archive, f)
 
         if verbose:
-            print(f"Candidate for Gen {generation}:\n{candidate_layout}")
+            print(f"Evaluated for Gen {generation}:\n{candidate_layout}")
             print(f"Gen {generation}: {'ACCEPTED' if accepted else 'rejected'}, win_rate={result['win_rate']:.2f}, outcomes={result['outcomes']}, archive_size={len(archive)}")
 
     agent.save(checkpoint_path)

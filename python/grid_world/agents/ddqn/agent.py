@@ -204,7 +204,7 @@ class DDQNAgent(BaseAgent):
 # Build agent
 ###############################################################################
 
-def build_agent(
+def build_ddqn_agent(
     width,
     height,
     n_actions=4,

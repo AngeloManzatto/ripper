@@ -11,7 +11,8 @@ Created on Fri Sep 11 07:14:57 2026
 from pathlib import Path
 import ripper
 
-from agents.ddqn.agent import build_agent
+from agents.ppo.agent import build_ppo_agent
+from agents.ddqn.agent import build_ddqn_agent
 from poet.lineage import run_lineage
 
 ###############################################################################
@@ -22,8 +23,8 @@ width  = 16
 height = 16
 
 max_tick=50
-generations = 200
-train_episodes_per_gen = 500
+generations = 1000
+train_episodes_per_gen = 20
 
 # model
 lr = 0.0001
@@ -32,7 +33,7 @@ lr = 0.0001
 # Files and folders
 ###############################################################################
 
-model_type = "ddpg"
+model_type = "ddqn"
 
 base_path = Path("checkpoint") / model_type
 base_path.mkdir(parents=True, exist_ok=True)
@@ -56,12 +57,12 @@ mutation_config = ripper.MutationConfig(
     n_wall_mutations=3,
     max_wall_density= 0.3,
 
-    max_enemies=3,
+    max_enemies=2,
     enemy_add_weight=0.4,
     enemy_remove_weight=0.2,
     enemy_nothing_weight=0.4,
 
-    max_traps=3,
+    max_traps=1,
     trap_add_weight=0.2,
     trap_remove_weight=0.1,
     trap_nothing_weight=0.7,
@@ -82,7 +83,7 @@ seed_layout = ripper.generate_valid_layout_py(
 # Agent
 ###############################################################################
 
-agent = build_agent(width=width, height=height, lr=lr)
+agent = build_ddqn_agent(width=width, height=height, lr=lr)
 
 ###############################################################################
 # Run lineage

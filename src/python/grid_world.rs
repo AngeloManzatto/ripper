@@ -28,6 +28,9 @@ pub struct PyGenerationConfig {
     pub num_enemies: usize,
      #[pyo3(get)]
     pub num_traps: usize,
+     #[pyo3(get)]
+    pub min_player_goal_distance: usize,
+    
 }
 
 #[pymethods]
@@ -39,6 +42,7 @@ impl PyGenerationConfig {
         wall_density=None,
         num_enemies=None,
         num_traps=None,
+        min_player_goal_distance=None,
     ))]
     fn new(
         width: Option<usize>,
@@ -46,6 +50,7 @@ impl PyGenerationConfig {
         wall_density: Option<f64>,
         num_enemies: Option<usize>,
         num_traps: Option<usize>,
+        min_player_goal_distance: Option<usize>,
     ) -> Self {
         let defaults = layout::GenerationConfig::default();
         PyGenerationConfig {
@@ -54,6 +59,7 @@ impl PyGenerationConfig {
             wall_density: wall_density.unwrap_or(defaults.wall_density),
             num_enemies: num_enemies.unwrap_or(defaults.num_enemies),
             num_traps: num_traps.unwrap_or(defaults.num_traps),
+            min_player_goal_distance: min_player_goal_distance.unwrap_or(defaults.min_player_goal_distance),
         }
     }
 }
@@ -66,6 +72,7 @@ impl From<&PyGenerationConfig> for layout::GenerationConfig {
             wall_density: config.wall_density,
             num_enemies: config.num_enemies,
             num_traps: config.num_traps,
+            min_player_goal_distance: config.min_player_goal_distance
         }
     }
 }

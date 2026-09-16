@@ -14,13 +14,14 @@ use rand::distributions::{WeightedIndex, Distribution};
 //-----------------------------------------------------
 // Layout Generator Configuration
 //-----------------------------------------------------
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct GenerationConfig {
     pub width: usize,
     pub height: usize,
     pub wall_density: f64,
     pub num_enemies: usize,
     pub num_traps: usize,
+    pub min_player_goal_distance: usize, 
 }
 
 impl Default for GenerationConfig {
@@ -31,6 +32,7 @@ impl Default for GenerationConfig {
             wall_density: 0.2,
             num_enemies: 1,
             num_traps: 0,
+            min_player_goal_distance: 0
         }
     }
 }
@@ -292,19 +294,17 @@ pub fn is_layout_reachable(layout: &str) -> bool {
     false
 }
 
+fn is_player_far_from_goal(layout: &str, min_player_goal_distance : usize) -> bool 
+{
+    let grid = layout_to_chars(layout);
 
-//-----------------------------------------------------
-// Generate Valid Layout
-//-----------------------------------------------------
+    let start = find_char(&grid, 'P').expect("no P found in layout");
+    let target = find_char(&grid, 'G').expect("no G found in layout");
 
-pub fn generate_valid_layout(config: &GenerationConfig, max_attempts: u32) -> String {
-    for _ in 0..max_attempts {
-        let layout_str = generate_layout(config);
-        if is_layout_reachable(&layout_str) {
-            return layout_str;
-        }
-    }
-    panic!("Could not produce a valid layout after {} attempts", max_attempts);
+    let manhattan_distance = start.0.abs_diff(target.0) + start.1.abs_diff(target.1);
+
+    min_player_goal_distance <= manhattan_distance
+
 }
 
 //-----------------------------------------------------
@@ -551,135 +551,21 @@ pub fn mutate_layout(layout: &str, config: &MutationConfig) -> String {
         .join("\n")
 }
 
-/*
+//-----------------------------------------------------
+// Generate Valid Layout
+//-----------------------------------------------------
 
-pub fn mutate_layout(layout: &str, config: &MutationConfig) -> String {
-    let mut grid = layout_to_chars(layout);
-    let height = grid.len();
-    let width = grid[0].len();
-
-    let mut map_positions: HashMap<char, Vec<(usize, usize)>> = HashMap::new();
-
-    for row in 1..height - 1 {
-        for col in 1..width - 1 {
-            let ch = grid[row][col];
-            map_positions.entry(ch).or_insert_with(Vec::new).push((row, col));
+pub fn generate_valid_layout(config: &GenerationConfig, max_attempts: u32) -> String {
+    for _ in 0..max_attempts {
+        let layout_str = generate_layout(config);
+        if is_layout_reachable(&layout_str) && 
+           is_player_far_from_goal(&layout_str, config.min_player_goal_distance) {
+            return layout_str;
         }
     }
-
-    let interior_cells = (height - 2) * (width - 2);
-    let mut wall_count = map_positions.get(&'#').map(|v| v.len()).unwrap_or(0);
-
-    let weights = [config.wall_weight, config.enemy_weight, config.trap_weight];
-    let dist = WeightedIndex::new(&weights).expect("invalid weights");
-    let mut rng = rand::thread_rng();
-
-    for _ in 0..config.cells_per_mutation {
-
-        let category = match dist.sample(&mut rng) {
-            0 => MutationCategory::Wall,
-            1 => MutationCategory::Enemy,
-            2 => MutationCategory::Trap,
-            _ => unreachable!(),
-        };
-
-        match category {
-            MutationCategory::Wall => {
-                let mut empty_positions = map_positions.remove(&'.').unwrap_or_default();
-                let mut wall_positions = map_positions.remove(&'#').unwrap_or_default();
-
-                if !empty_positions.is_empty() && (wall_count + 1) as f64 / interior_cells as f64 <= config.max_wall_density {
-                    let idx = rng.gen_range(0..empty_positions.len());
-                    let pos = empty_positions.remove(idx);
-                    grid[pos.0][pos.1] = '#';
-                    wall_positions.push(pos);
-                    wall_count += 1;
-                } else if !wall_positions.is_empty() {
-                    let idx = rng.gen_range(0..wall_positions.len());
-                    let pos = wall_positions.remove(idx);
-                    grid[pos.0][pos.1] = '.';
-                    empty_positions.push(pos);
-                    wall_count -= 1;
-                }
-
-                map_positions.insert('.', empty_positions);
-                map_positions.insert('#', wall_positions);
-            }
-            MutationCategory::Enemy => {
-                let mut empty_positions = map_positions.remove(&'.').unwrap_or_default();
-                let mut enemy_positions = map_positions.remove(&'E').unwrap_or_default();
-                let enemy_count = enemy_positions.len() as u32;
-
-                if !empty_positions.is_empty() && enemy_count < config.max_enemies {
-                    let idx = rng.gen_range(0..empty_positions.len());
-                    let pos = empty_positions.remove(idx);
-                    enemy_positions.push(pos);
-                    grid[pos.0][pos.1] = 'E';
-                }
-
-                map_positions.insert('.', empty_positions);
-                map_positions.insert('E', enemy_positions);
-            }
-            MutationCategory::Trap => {
-                let mut empty_positions = map_positions.remove(&'.').unwrap_or_default();
-                let mut trap_positions = map_positions.remove(&'T').unwrap_or_default();
-                let trap_count = trap_positions.len() as u32;
-
-                if !empty_positions.is_empty() && trap_count < config.max_traps {
-                    let idx = rng.gen_range(0..empty_positions.len());
-                    let pos = empty_positions.remove(idx);
-                    trap_positions.push(pos);
-                    grid[pos.0][pos.1] = 'T';
-                }
-
-                map_positions.insert('.', empty_positions);
-                map_positions.insert('T', trap_positions);
-            }
-            MutationCategory::Reposition => {
-                let mut empty_positions = map_positions.remove(&'.').unwrap_or_default();
-
-                // Gather all entity characters currently present, each with its position
-                let entity_chars = ['P', 'G', 'E', 'T'];
-                let mut all_entities: Vec<(char, (usize, usize))> = Vec::new();
-                for &ch in &entity_chars {
-                    if let Some(positions) = map_positions.get(&ch) {
-                        for &pos in positions {
-                            all_entities.push((ch, pos));
-                        }
-                    }
-                }
-
-                if !all_entities.is_empty() && !empty_positions.is_empty() {
-                    let idx = rng.gen_range(0..all_entities.len());
-                    let (entity_char, old_pos) = all_entities[idx];
-
-                    let new_idx = rng.gen_range(0..empty_positions.len());
-                    let new_pos = empty_positions.remove(new_idx);
-
-                    // Move: clear old cell, place entity at new cell
-                    grid[old_pos.0][old_pos.1] = '.';
-                    grid[new_pos.0][new_pos.1] = entity_char;
-                    empty_positions.push(old_pos);
-
-                    // Update this entity's specific position within its own list
-                    if let Some(positions) = map_positions.get_mut(&entity_char) {
-                        if let Some(p) = positions.iter_mut().find(|p| **p == old_pos) {
-                            *p = new_pos;
-                        }
-                    }
-                }
-
-                map_positions.insert('.', empty_positions);
-            }
-        }
-    }
-
-    grid.iter()
-        .map(|row| row.iter().collect::<String>())
-        .collect::<Vec<String>>()
-        .join("\n")
+    panic!("Could not produce a valid layout after {} attempts", max_attempts);
 }
-*/
+
 //-----------------------------------------------------
 // Mutate Valid Layout
 //-----------------------------------------------------
