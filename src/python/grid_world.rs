@@ -296,13 +296,38 @@ impl From<PyAction> for Action {
 }
 
 //-----------------------------------------------------
+// Entity Observation
+//-----------------------------------------------------
+
+#[pyclass(name = "EntityObservation", from_py_object)]
+#[derive(Clone)]
+pub struct PyEntityObservation {
+    #[pyo3(get)]
+    pub id: u32,
+    #[pyo3(get)]
+    pub position: (usize, usize),
+    #[pyo3(get)]
+    pub grid: Vec<Vec<i32>>,
+}
+
+impl From<world::EntityObservation> for PyEntityObservation {
+    fn from(obs: world::EntityObservation) -> Self {
+        PyEntityObservation {
+            id: obs.id,
+            position: obs.position,
+            grid: obs.grid,
+        }
+    }
+}
+
+//-----------------------------------------------------
 // Observation
 //-----------------------------------------------------
 
 #[pyclass(name = "Observation")]
 pub struct PyObservation {
     #[pyo3(get)]
-    pub grid: Vec<Vec<Vec<f64>>>,
+    pub entities: Vec<PyEntityObservation>,
     #[pyo3(get)]
     pub player_id: u32,
     #[pyo3(get)]
@@ -312,7 +337,7 @@ pub struct PyObservation {
 impl From<Observation> for PyObservation {
     fn from(obs: Observation) -> Self {
         PyObservation {
-            grid: obs.grid,
+            entities: obs.entities.into_iter().map(Into::into).collect(),
             player_id: obs.player_id,
             enemy_ids: obs.enemy_ids,
         }

@@ -37,10 +37,30 @@ impl Default for WorldConfig {
 // Observation
 //-----------------------------------------------------
 
+pub struct EntityObservation {
+    pub id: u32,
+    pub position: (usize, usize),
+    pub grid: Vec<Vec<i32>>,
+}
+
 pub struct Observation {
-    pub grid: Vec<Vec<Vec<f64>>>,
+    pub entities: Vec<EntityObservation>,
     pub player_id: u32,
     pub enemy_ids: Vec<u32>,
+}
+
+//-----------------------------------------------------
+// Cell encoding
+//-----------------------------------------------------
+
+fn kind_to_cell(kind: EntityKind) -> i32 {
+    match kind {
+        EntityKind::Wall   => 1,
+        EntityKind::Player => 2,
+        EntityKind::Enemy  => 3,
+        EntityKind::Trap   => 4,
+        EntityKind::Goal   => 5,
+    }
 }
 
 //-----------------------------------------------------
@@ -187,24 +207,54 @@ impl Environment for World {
     }
 
    fn observation(&self) -> Observation {
-        let mut grid = vec![vec![vec![0.0; self.width]; self.height]; 5];
+    
+        let entities: Vec<EntityObservation> = self.positions.iter()
+            .filter_map(|(&id, &pos)| {
+                let discovered = self.discovered.get(&id)?;
+                let perception_range = *self.perception_ranges.get(&id)?;
 
-        for (&id, &pos) in self.positions.iter() {
-            let kind = self.kinds.get(&id).expect("entity has no kind");
-            let channel = match kind {
-                EntityKind::Player => 0,
-                EntityKind::Enemy  => 1,
-                EntityKind::Goal   => 2,
-                EntityKind::Wall   => 3,
-                EntityKind::Trap   => 4,
-            };
-            grid[channel][pos.0][pos.1] = 1.0;
-        }
+                // This tick's actual FOV — recomputed fresh, not the
+                // accumulated `discovered` set. Mirrors draw_world's
+                // `visible_cells` argument.
+                let visible_cells: std::collections::HashSet<(usize, usize)> =
+                    vision::get_visible_cells(self, pos, perception_range)
+                        .into_iter()
+                        .collect();
+
+                let mut grid = vec![vec![-1i32; self.width]; self.height];
+
+                // Pass 1: terrain — shown if ever discovered, regardless of
+                // current visibility. Movers occupying a merely-discovered
+                // (not currently visible) cell are NOT drawn here.
+                for &(r, c) in discovered {
+                    grid[r][c] = self.positions.iter()
+                        .find_map(|(k, &p)| if p == (r, c) { Some(k) } else { None })
+                        .map(|occ_id| self.kinds[occ_id])
+                        .filter(|kind| matches!(kind, EntityKind::Wall | EntityKind::Trap | EntityKind::Goal))
+                        .map(kind_to_cell)
+                        .unwrap_or(0); // empty floor
+                }
+
+                // Pass 2: movers — only shown if currently visible this tick,
+                // overwriting whatever pass 1 wrote (floor or terrain-under-them).
+                for &(r, c) in &visible_cells {
+                    if let Some(occ_id) = self.positions.iter()
+                        .find_map(|(k, &p)| if p == (r, c) { Some(k) } else { None })
+                    {
+                        if matches!(self.kinds[occ_id], EntityKind::Player | EntityKind::Enemy) {
+                            grid[r][c] = kind_to_cell(self.kinds[occ_id]);
+                        }
+                    }
+                }
+
+                Some(EntityObservation { id, position: pos, grid })
+            })
+            .collect();
 
         let player_id = get_entity_ids_by_kind(self, EntityKind::Player)[0];
         let enemy_ids = get_entity_ids_by_kind(self, EntityKind::Enemy);
 
-        Observation { grid, player_id, enemy_ids }
+        Observation { entities, player_id, enemy_ids }
     }
 
     fn is_done(&self) -> bool {
