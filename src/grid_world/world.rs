@@ -3,12 +3,35 @@
 //-----------------------------------------------------
 
 use rand;
-use std::io::Write;
 use std::collections::HashMap;
+use std::usize;
+
 use crate::grid_world::entity::EntityKind;
 use crate::grid_world::action::Action;
-use crate::grid_world::layout::parse_layout;
+use crate::grid_world::layout::{parse_layout};
 use crate::grid_world::environment::Environment;
+use crate::grid_world::vision;
+
+//-----------------------------------------------------
+// World Configuration
+//-----------------------------------------------------
+
+#[derive(Clone, Debug)]
+pub struct WorldConfig {
+    pub max_tick: u32,
+    pub player_perception_range: usize,
+    pub enemy_perception_range: usize,
+}
+
+impl Default for WorldConfig {
+    fn default() -> Self {
+        WorldConfig {
+            max_tick: 100,
+            player_perception_range: 5,
+            enemy_perception_range: 5,
+        }
+    }
+}
 
 //-----------------------------------------------------
 // Observation
@@ -45,13 +68,15 @@ pub struct World {
     pub width: usize,
     pub height: usize,
     pub next_id: u32,
-    pub positions: HashMap<u32, (usize, usize)>,
-    pub kinds: HashMap<u32, EntityKind>,
+    pub positions  : HashMap<u32, (usize, usize)>,
+    pub kinds      : HashMap<u32, EntityKind>,
+    pub discovered : HashMap<u32, std::collections::HashSet<(usize, usize)>>,
+    pub perception_ranges: HashMap<u32, usize>,
     pub layout: String,
     pub done: bool,
     pub end_reason: Option<EndReason>,
     pub tick: u32,
-    pub max_tick:u32
+    pub config:WorldConfig
 }
 
 //-----------------------------------------------------
@@ -65,7 +90,7 @@ impl Environment for World {
 
     // Reset world
     fn reset(&mut self) {
-        let new_world = parse_layout(&self.layout, self.max_tick);
+        let new_world = parse_layout(&self.layout, &self.config);
         *self = new_world;
     }
 
@@ -87,7 +112,7 @@ impl Environment for World {
         self.tick += 1;
 
         // Check if episode is finished by time out
-        if self.tick >= self.max_tick {
+        if self.tick >= self.config.max_tick {
             self.done = true;
             self.end_reason = Some(EndReason::Timeout);
             return StepResult { done: self.done, reason: self.end_reason };
@@ -147,6 +172,17 @@ impl Environment for World {
             self.end_reason = Some(EndReason::GoalReached);
         }
 
+        //--------------------------------------------------
+        // Update discovered cells (FOW)
+        //--------------------------------------------------
+
+        for (&id, _) in resolved_actions.iter() {
+            if let Some(&perception_range) = self.perception_ranges.get(&id) {
+                let current_pos = self.positions[&id];
+                update_discovered(self, id, current_pos, perception_range);
+            }
+        }
+
         StepResult { done: self.done, reason: self.end_reason }
     }
 
@@ -198,11 +234,12 @@ pub fn despawn_entity(world: &mut World, id: u32) {
 
     world.kinds.remove(&id).unwrap_or_else(|| panic!("ID '{}' not found in kinds", id));
     world.positions.remove(&id).unwrap_or_else(|| panic!("ID '{}' not found in positions", id));
-
+    world.discovered.remove(&id).unwrap_or_else(|| panic!("ID '{}' not found in discovered", id));
+    world.perception_ranges.remove(&id).unwrap_or_else(|| panic!("ID '{}' not found in perception_range", id));
 }
 
 //-----------------------------------------------------
-// Query entity ids by kind
+// Getters 
 //-----------------------------------------------------
 
 pub fn get_entity_ids_by_kind(world: &World, kind: EntityKind) -> Vec<u32>
@@ -296,40 +333,15 @@ pub fn check_trap_collision(world: &World, entity_id: u32) -> bool {
 }
 
 //-----------------------------------------------------
-// Print world
+// Update discovered (FOW)
 //-----------------------------------------------------
 
-pub fn render_world(world: &World) -> String {
-    let mut output = String::new();
+pub fn update_discovered(world: &mut World, id: u32, pos: (usize, usize), perception_range: usize)
+{
 
-    for row in 0..world.height {
-        for col in 0..world.width {
-            let found_id = world.positions.iter()
-                .find(|(_, pos)| **pos == (row, col))
-                .map(|(id, _)| *id);
+    let visible = vision::get_visible_cells(world, pos, perception_range);
 
-            let ch = match found_id {
-                Some(id) => {
-                    let kind = world.kinds.get(&id).expect("entity has no kind");
-                    match kind {
-                        EntityKind::Player => 'P',
-                        EntityKind::Enemy  => 'E',
-                        EntityKind::Goal   => 'G',
-                        EntityKind::Wall   => '#',
-                        EntityKind::Trap   => 'T',
-                    }
-                }
-                None => '.',
-            };
-            output.push(ch);
-        }
-        output.push('\n');
-    }
-
-    output
-}
-
-pub fn print_world(world: &World) {
-    print!("{}", render_world(world));
-    std::io::stdout().flush().unwrap();
+    world.discovered.entry(id)
+                    .or_insert_with(std::collections::HashSet::new)
+                    .extend(visible);
 }

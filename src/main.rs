@@ -4,6 +4,7 @@
 
 use ripper::grid_world::layout;
 use ripper::grid_world::world;
+use ripper::grid_world::render;
 
 //-----------------------------------------------------
 // Main Function
@@ -11,8 +12,7 @@ use ripper::grid_world::world;
 
 fn main() {
 
-    let max_tick = 100;
-    let config = layout::GenerationConfig {
+    let generation_config = layout::GenerationConfig {
         width: 16,
         height: 16,
         wall_density:0.2,
@@ -20,10 +20,13 @@ fn main() {
         num_traps:1,
         min_player_goal_distance:0
     };
+    
 
-    let layout = layout::generate_layout(&config);
-    let world = layout::parse_layout(&layout, max_tick);
+    let layout = layout::generate_layout(&generation_config);
+    let world = layout::parse_layout(&layout, &world::WorldConfig::default());
 
-    world::render_world(&world);
+    render::render_world(&world);
 
+   
 }
+

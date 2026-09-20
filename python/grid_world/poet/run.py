@@ -28,6 +28,7 @@ train_episodes_per_gen = 20
 
 # model
 lr = 0.0001
+batch_size = 128
 
 ###############################################################################
 # Files and folders
@@ -83,7 +84,7 @@ seed_layout = ripper.generate_valid_layout_py(
 # Agent
 ###############################################################################
 
-agent = build_ddqn_agent(width=width, height=height, lr=lr)
+agent = build_ddqn_agent(width=width, height=height, lr=lr, batch_size=batch_size)
 
 ###############################################################################
 # Run lineage

@@ -2,7 +2,7 @@
 // Imports
 //-----------------------------------------------------
 
-use crate::grid_world::entity;
+use crate::grid_world::entity::EntityKind;
 use crate::grid_world::world;
 use std::collections::HashMap;
 use std::collections::{VecDeque, HashSet};
@@ -14,6 +14,7 @@ use rand::distributions::{WeightedIndex, Distribution};
 //-----------------------------------------------------
 // Layout Generator Configuration
 //-----------------------------------------------------
+
 #[derive(Clone, Copy, Debug)]
 pub struct GenerationConfig {
     pub width: usize,
@@ -61,6 +62,7 @@ pub struct MutationConfig {
 
     // Reposition mutation
     pub n_repositions: usize,
+    pub min_player_goal_distance: usize, 
 }
 
 impl Default for MutationConfig {
@@ -80,6 +82,7 @@ impl Default for MutationConfig {
             trap_nothing_weight: 0.7,
 
             n_repositions: 1,
+            min_player_goal_distance: 0
         }
     }
 }
@@ -160,7 +163,7 @@ pub fn generate_layout(config: &GenerationConfig) -> String {
 // Parse Layout
 //-----------------------------------------------------
 
-pub fn parse_layout(layout: &str, max_tick:u32) -> world::World {
+pub fn parse_layout(layout: &str, config: &world::WorldConfig) -> world::World {
 
     // Initialize string of lines iterator
     let lines: Vec<&str> = layout.lines().collect();
@@ -174,13 +177,15 @@ pub fn parse_layout(layout: &str, max_tick:u32) -> world::World {
         width,
         height,
         next_id: 0,
-        positions: std::collections::HashMap::new(),
-        kinds: std::collections::HashMap::new(),
+        positions : std::collections::HashMap::new(),
+        kinds     : std::collections::HashMap::new(),
+        discovered: std::collections::HashMap::new(),
+        perception_ranges : std::collections::HashMap::new(),
         layout: layout.to_string(),
         done: false,
         end_reason: None,
         tick:0,
-        max_tick: max_tick
+        config:config.clone()
     };
 
     for (row, line) in lines.iter().enumerate() {
@@ -192,20 +197,36 @@ pub fn parse_layout(layout: &str, max_tick:u32) -> world::World {
         }
 
         for (col, ch) in trimmed_line.chars().enumerate() {
-            let kind = match ch {
-                '#' => Some(entity::EntityKind::Wall),
-                'P' => Some(entity::EntityKind::Player),
-                'E' => Some(entity::EntityKind::Enemy),
-                'G' => Some(entity::EntityKind::Goal),
-                'T' => Some(entity::EntityKind::Trap),
-                '.' => None,
-                _ => panic!("Unknown layout character: '{}'", ch),
-            };
+
+            let kind = EntityKind::from_char(ch);
 
             if let Some(k) = kind {
-                world::spawn_entity(&mut world, k, (row, col));
+                let id = world::spawn_entity(&mut world, k, (row, col));
+
+                match k {
+                    EntityKind::Player => { 
+                        world.perception_ranges.insert(id, config.player_perception_range); 
+                        world.discovered.insert(id, std::collections::HashSet::new());
+                    }
+                    EntityKind::Enemy  => { 
+                        world.perception_ranges.insert(id, config.enemy_perception_range); 
+                        world.discovered.insert(id, std::collections::HashSet::new());
+                    }
+                    _ => {}
+                }
+                
+            } else if ch != '.' {
+                panic!("Unknown layout character: '{}'", ch);
             }
+
         }
+    }
+
+    let perceiving_ids: Vec<u32> = world.perception_ranges.keys().copied().collect();
+    for id in perceiving_ids {
+        let pos = world.positions[&id];
+        let range = world.perception_ranges[&id];
+        world::update_discovered(&mut world, id, pos, range);
     }
 
     world
@@ -572,7 +593,8 @@ pub fn generate_valid_layout(config: &GenerationConfig, max_attempts: u32) -> St
 pub fn mutate_valid_layout(layout: &str, config: &MutationConfig, max_attempts: u32) -> String {
     for _ in 0..max_attempts {
         let candidate = mutate_layout(layout, config);
-        if is_layout_reachable(&candidate) {
+        if is_layout_reachable(&candidate) && 
+           is_player_far_from_goal(&candidate, config.min_player_goal_distance) {
             return candidate;
         }
     }

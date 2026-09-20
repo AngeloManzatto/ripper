@@ -11,6 +11,53 @@ use crate::grid_world::world::World;
 use crate::grid_world::environment::Environment;
 use crate::grid_world::action::Action;
 use crate::grid_world::layout;
+use crate::grid_world::render;
+
+//-----------------------------------------------------
+// World Config
+//-----------------------------------------------------
+
+#[pyclass(name = "WorldConfig")]
+pub struct PyWorldConfig {
+    #[pyo3(get)]
+    pub max_tick: u32,
+    #[pyo3(get)]
+    pub player_perception_range: usize,
+    #[pyo3(get)]
+    pub enemy_perception_range: usize,
+}
+
+#[pymethods]
+impl PyWorldConfig {
+    #[new]
+    #[pyo3(signature = (
+        max_tick=None,
+        player_perception_range=None,
+        enemy_perception_range=None,
+    ))]
+    fn new(
+        max_tick: Option<u32>,
+        player_perception_range: Option<usize>,
+        enemy_perception_range: Option<usize>,
+    ) -> Self {
+        let defaults = world::WorldConfig::default();
+        PyWorldConfig {
+            max_tick: max_tick.unwrap_or(defaults.max_tick),
+            player_perception_range: player_perception_range.unwrap_or(defaults.player_perception_range),
+            enemy_perception_range: enemy_perception_range.unwrap_or(defaults.enemy_perception_range),
+        }
+    }
+}
+
+impl From<&PyWorldConfig> for world::WorldConfig {
+    fn from(config: &PyWorldConfig) -> Self {
+        world::WorldConfig {
+            max_tick: config.max_tick,
+            player_perception_range: config.player_perception_range,
+            enemy_perception_range: config.enemy_perception_range,
+        }
+    }
+}
 
 //-----------------------------------------------------
 // Layout Generate Config
@@ -108,6 +155,8 @@ pub struct PyMutationConfig {
 
     #[pyo3(get)]
     pub n_repositions: usize,
+    #[pyo3(get)]
+    pub min_player_goal_distance: usize,
 }
 
 #[pymethods]
@@ -125,6 +174,7 @@ impl PyMutationConfig {
         trap_remove_weight=None,
         trap_nothing_weight=None,
         n_repositions=None,
+        min_player_goal_distance=None,
     ))]
     fn new(
         n_wall_mutations: Option<usize>,
@@ -138,6 +188,7 @@ impl PyMutationConfig {
         trap_remove_weight: Option<f64>,
         trap_nothing_weight: Option<f64>,
         n_repositions: Option<usize>,
+        min_player_goal_distance: Option<usize>,
     ) -> Self {
         let defaults = layout::MutationConfig::default();
         PyMutationConfig {
@@ -152,6 +203,7 @@ impl PyMutationConfig {
             trap_remove_weight: trap_remove_weight.unwrap_or(defaults.trap_remove_weight),
             trap_nothing_weight: trap_nothing_weight.unwrap_or(defaults.trap_nothing_weight),
             n_repositions: n_repositions.unwrap_or(defaults.n_repositions),
+            min_player_goal_distance: min_player_goal_distance.unwrap_or(defaults.min_player_goal_distance),
         }
     }
 }
@@ -170,6 +222,7 @@ impl From<&PyMutationConfig> for layout::MutationConfig {
             trap_remove_weight: config.trap_remove_weight,
             trap_nothing_weight: config.trap_nothing_weight,
             n_repositions: config.n_repositions,
+            min_player_goal_distance: config.min_player_goal_distance
         }
     }
 }
@@ -295,8 +348,9 @@ pub struct PyWorld {
 #[pymethods]
 impl PyWorld {
     #[new]
-    fn new(layout: &str, max_tick: u32) -> Self {
-        let world = layout::parse_layout(layout, max_tick);
+    fn new(layout: &str, config: &PyWorldConfig) -> Self {
+        let rust_config: world::WorldConfig = config.into();
+        let world = layout::parse_layout(layout, &rust_config);
         PyWorld { world }
     }
 
@@ -332,7 +386,7 @@ impl PyWorld {
     }
 
     fn print_world(&self) {
-        world::print_world(&self.world);
+        render::print_world(&self.world);
     }
 
     fn __repr__(&self) -> String {
@@ -342,6 +396,6 @@ impl PyWorld {
     }
 
     fn __str__(&self) -> String {
-        world::render_world(&self.world)
+        render::render_world(&self.world)
     }
 }

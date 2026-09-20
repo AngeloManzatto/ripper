@@ -16,6 +16,7 @@ use pyo3::prelude::*;
 
 #[pymodule]
 fn ripper(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<grid_world::PyWorldConfig>()?;
     m.add_class::<grid_world::PyWorld>()?;
     m.add_class::<grid_world::PyObservation>()?;
     m.add_class::<grid_world::PyStepResult>()?;

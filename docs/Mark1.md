@@ -14,3 +14,13 @@
 [ ] - Full chase/fog-of-war behavior for enemies (currently random movement, chase logic designed but not yet ported)
 [ ] - ActionSource trait / game-loop abstraction (human vs. agent-driven input — designed in discussion, not yet built)
 [ ] - Sprites instead of colored rectangles in the visual renderer
+
+# 2026-09-16
+
+Line Of Sight (LOS) design:
+
+1 - perception_range — a hard distance cutoff, independent parameter for player and enemies, each with sensible defaults.
+2 - Line-tracing (Bresenham-style) between observer and target, checking each traversed cell for a wall.
+3 - Approximate diagonal traversal accepted as the baseline tracing method (no need for a mathematically perfect continuous line).
+4 - Diagonal-corner blocking rule: whenever the traced line takes a diagonal step, if both flanking cells (the one sharing a row, the one sharing a column with the step) are walls, treat that step as blocked — sealing visually-touching diagonal corners, matching physical intuition.
+5 - LOS is symmetric by construction (same line, same walls, same result regardless of direction) and applies independently of, but combined with, the perception-range cutoff — both conditions must hold for visibility.
