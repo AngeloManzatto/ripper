@@ -8,9 +8,11 @@ Created on Thu Sep 10 13:06:16 2026
 # libraries
 ###############################################################################
 
-import ripper
-from ripper import Action
 from collections import Counter
+
+from ripper import Action
+
+from agents.observation import get_one_hot_grid_for_entity
 
 ###############################################################################
 # Globals
@@ -19,36 +21,102 @@ from collections import Counter
 ACTIONS = [Action.Up, Action.Down, Action.Left, Action.Right]
 
 ###############################################################################
-# Evaluate
+# Evaluate Match
 ###############################################################################
 
-def evaluate(agent, layout, max_tick=100, episodes=50):
-    agent.set_eval_mode()
-
-    world = ripper.PyWorld(layout, max_tick)
-    player_id = world.get_player_id()
-    outcomes = []
+def evaluate_match(agents, agent_ids, world, episodes):
+    
+    # Outcomes for each agent. Palyer and Enemy are decided differently
+    outcomes = {agent_id: [] for agent_id in agent_ids}
+    
+    for agent, agent_id in zip(agents, agent_ids):
+        
+        agent.set_eval_mode()
 
     for _ in range(episodes):
-        world.reset()
+        world.reset(reposition=True)
         observation = world.observation()
         done = False
-
+        
         while not done:
-            action_idx = agent.act(observation.grid)
-            step_result = world.step({player_id: ACTIONS[action_idx]})
+            
+            actions = {}
+            
+            for agent, agent_id in zip(agents, agent_ids):
+                
+                # Get current state for agent
+                state = get_one_hot_grid_for_entity(observation, agent_id)
+                
+                # Play an action given current env state
+                action_idx = agent.act(state)
+                                       
+                # Regist action for agent
+                actions[agent_id] = ACTIONS[action_idx]
+                
+            # Act on env
+            step_result = world.step(actions)
+            
+            # Get current env result
             done, reason = step_result.done, step_result.reason
+            
+            # Update observation current state
             observation = world.observation()
+            
+        # Store outcomes
+        for agent_id in agent_ids:
+            outcomes[agent_id].append(str(reason))
+            
+    for agent, agent_id in zip(agents, agent_ids):
+        
+        agent.set_train_mode()
+        
+    player_id = world.get_player_id()
+    results = {}
+    for agent_id in agent_ids:
+        is_player = agent_id == player_id
+        win_reason = "EndReason.GoalReached" if is_player else "EndReason.Caught"
+        breakdown = Counter(outcomes[agent_id])
 
-        outcomes.append(str(reason))
+        results[agent_id] = {
+            "win_rate": breakdown.get(win_reason, 0) / episodes,
+            "timeout_rate": breakdown.get("EndReason.Timeout", 0) / episodes,
+            "breakdown": dict(breakdown),
+        }
+            
+    return results
 
-    agent.set_train_mode()
+###############################################################################
+# Evaluate MC (Minimum Criterion POET)
+###############################################################################
 
-    counts = Counter(outcomes)
-    win_rate = counts.get("EndReason.GoalReached", 0) / episodes
+def passes_minimal_criterion(results, win_low=0.2, win_high=0.7, timeout_cap=0.3):
+    """
+    Decide whether a layout's current evaluation is a valid stepping stone:
+    neither side dominates, and the episodes are actually resolving.
 
-    return {
-        "win_rate": win_rate,
-        "episodes": episodes,
-        "outcomes": dict(counts),
-    }
+    Parameters
+    ----------
+    results : dict
+        Shape returned by evaluate_match:
+        {agent_id: {"win_rate": float, "timeout_rate": float, "breakdown": dict}, ...}
+    win_low, win_high : float
+        Every agent's win_rate must fall within [win_low, win_high] (inclusive).
+    timeout_cap : float
+        Reject if timeout_rate exceeds this (checked once -- it's the same
+        value across every agent in `results`, since it comes from the same
+        shared set of episode outcomes).
+
+    Returns
+    -------
+    bool
+    """
+ 
+    for value in results.values():
+        
+        if not win_low <= value["win_rate"] <= win_high:
+            return False
+        
+        if value["timeout_rate"] > timeout_cap:
+            return False
+
+    return True

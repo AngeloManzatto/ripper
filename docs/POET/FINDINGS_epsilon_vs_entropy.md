@@ -120,3 +120,91 @@ seed - '################\n#......P##.....#\n#......#.......#\n#..............#\n
 seed - '################\n#........#.....#\n#...........#..#\n##.#.....#.....#\n#.#E......P....#\n#.#.....#......#\n#.......#..##..#\n##...##.#..#...#\n#...........#.##\n#G#..........#.#\n#.#..#.........#\n#.......#......#\n#.............##\n#..............#\n#....#.........#\n################'
 
 1 - PPO - 53 - 1000
+
+# 2026-09-23
+---
+
+# FINDINGS: Static-Layout Deadlock in POET's Minimal-Criterion Gate
+
+## Summary
+
+A single-entry POET population (one static layout, player+enemy DDQN) can get
+permanently stuck if the starting seed's win-rate imbalance is severe enough
+that it never enters the minimal-criterion admit band. Once stuck, the
+mutation step (`mutate_envs`) never fires for that entry — because mutation
+eligibility itself requires passing the same minimal criterion the entry is
+failing — so the population can never grow, and the same static layout keeps
+training indefinitely.
+
+## Observed symptoms
+
+- Population size stayed at 1 across 150+ outer iterations (~15,000+ episodes)
+  of a single static layout.
+- Player win_rate pinned at ~1.0 (GoalReached), enemy win_rate ~0.0 (never
+  Caught), stable across many consecutive evaluations.
+- Player avg_loss dropped to ~0.0003 — consistent with the network converging
+  to a single memorized trajectory rather than a general policy.
+- Confirmed via added logging: `mutate_envs`'s reproduction-eligibility check
+  (`passes_minimal_criterion(parent["last_eval"], ...)`) rejected the entry on
+  every single outer iteration it was checked.
+
+## Root cause 1: eligibility-gated mutation is a chicken-and-egg trap
+
+`mutate_envs` only attempts mutation for entries that already pass the
+minimal criterion. If a seed's imbalance is severe enough that win_rate never
+enters `[win_low, win_high]` regardless of training duration, that entry can
+never become reproduction-eligible — the mechanism meant to introduce
+diversity is gated behind already having escaped the imbalance it's supposed
+to help escape. The original POET paper (ES-based) is less prone to this
+because ES's population-averaged gradient step doesn't collapse into a single
+deterministic extreme the way a greedy DQN policy can (see the separate
+"greedy-argmax cycling" finding, already documented).
+
+## Root cause 2: deterministic spawns enable memorization, not generalization
+
+`World::reset()` currently restores player/enemy/goal to the exact same
+parsed layout positions every episode. Across thousands of repetitions of one
+static entry, the network never observes a different spatial configuration —
+it is not learning a general "navigate toward goal while evading a hunter"
+policy, it is learning the one specific move sequence that solves the one
+specific board it has ever seen. This is consistent with the near-zero
+avg_loss observed. Critically: this would eventually happen on *any* static
+seed given enough repetitions, including a geometrically fair one — layout
+fairness only changes how quickly collapse happens, not whether it happens.
+
+## Two distinct candidate fixes (not mutually exclusive)
+
+1. **Generator-side fairness constraint** — add a `min_player_enemy_distance`
+   (or similar) to the initial layout generator/mutator, mirroring the
+   existing `min_player_goal_distance`. Addresses root cause 1 (gets an
+   initial seed into the admit band faster / more reliably) but does nothing
+   for root cause 2.
+
+2. **Spawn randomization on reset** — instead of `reset()` always restoring
+   the parsed layout's fixed spawn cells, sample player/enemy/goal positions
+   fresh each episode from the layout's walkable free-space, keeping
+   walls/traps fixed. Addresses root cause 2 directly, forcing genuine
+   spatial generalization instead of single-trajectory memorization. Larger
+   design decision: would require Rust-side changes to `World::reset()`
+   and/or `layout.rs` to support sampling valid positions rather than always
+   using the parsed originals.
+
+## Open questions (not yet decided)
+
+- Does spawn randomization happen *within* one entry's lifetime (same
+  layout/walls, new random spawns each episode), or does POET's own mutation
+  mechanism become responsible for spawn diversity instead?
+- If per-episode spawn randomization is added, does it change what "the
+  environment" means for POET's own bookkeeping (is a layout still one
+  `EA_list` entry if its spawns vary episode-to-episode, or does that
+  effectively turn one entry into a distribution over related environments)?
+- Should the minimal-criterion eligibility check itself have an escape hatch
+  (e.g. a hard iteration cap after which mutation is attempted regardless of
+  MC status) to prevent permanent deadlock even if root cause 2 isn't fully
+  addressed?
+
+## Status
+
+Diagnosed, not yet fixed. Next step: decide whether to pursue fix (1), fix
+(2), or both, before resuming a long POET run — further training time alone
+will not resolve this.

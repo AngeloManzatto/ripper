@@ -393,8 +393,9 @@ impl PyWorld {
         get_entity_ids_by_kind(&self.world, EntityKind::Enemy)
     }
 
-    fn reset(&mut self) {
-        self.world.reset();
+    #[pyo3(signature = (reposition=false))]
+    fn reset(&mut self, reposition: bool) {
+        self.world.reset_with_reposition(reposition);
     }
 
     fn step(&mut self, actions: HashMap<u32, PyAction>) -> PyResult<PyStepResult> {

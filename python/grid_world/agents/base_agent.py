@@ -21,11 +21,6 @@ class BaseAgent(ABC):
         ...
 
     @abstractmethod
-    def train(self, layout, episodes, **kwargs):
-        """Train on the given layout for the given number of episodes."""
-        ...
-        
-    @abstractmethod
     def set_eval_mode(self):
         """Switch to deterministic/evaluation behavior."""
         ...
@@ -45,4 +40,7 @@ class BaseAgent(ABC):
         """Load model."""
         ...
         
-        
+    @abstractmethod
+    def clone(self):
+        """Load model."""
+        ...

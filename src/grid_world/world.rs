@@ -3,6 +3,7 @@
 //-----------------------------------------------------
 
 use rand;
+use rand::Rng;
 use std::collections::HashMap;
 use std::usize;
 
@@ -99,6 +100,64 @@ pub struct World {
     pub config:WorldConfig
 }
 
+impl World {
+
+    pub fn reset_with_reposition(&mut self, reposition: bool) {
+        let new_world = parse_layout(&self.layout, &self.config);
+        *self = new_world;
+        if reposition {
+            self.reposition_entities();
+        }
+    }
+
+    fn reposition_entities(&mut self) {
+
+        // Get all cells that are not wall 
+        let walkable = self.walkable_floor_cells();
+        let mut rng = rand::thread_rng();
+
+        // Get entities that should be repositioned
+        let player_id = get_entity_ids_by_kind(self, EntityKind::Player)[0];
+        let goal_id   = get_entity_ids_by_kind(self, EntityKind::Goal)[0];
+        let enemy_ids = get_entity_ids_by_kind(self, EntityKind::Enemy);
+
+        // Stack all ids
+        let movable_ids: Vec<u32> = std::iter::once(player_id)
+            .chain(std::iter::once(goal_id))
+            .chain(enemy_ids.iter().copied())
+            .collect();
+
+        // Select a new position for each entity
+        let mut chosen: Vec<(usize, usize)> = Vec::new();
+        for _ in &movable_ids {
+            loop {
+                let candidate = walkable[rng.gen_range(0..walkable.len())];
+                if !chosen.contains(&candidate) {
+                    chosen.push(candidate);
+                    break;
+                }
+            }
+        }
+
+        // Update id, position into our ECS hashmap 
+        for (id, pos) in movable_ids.iter().zip(chosen.iter()) {
+            self.positions.insert(*id, *pos);
+        }
+    }
+
+    fn walkable_floor_cells(&self) -> Vec<(usize, usize)> {
+        let mut cells = Vec::new();
+        for r in 0..self.height {
+            for c in 0..self.width {
+                if is_walkable(self, (r, c)) {
+                    cells.push((r, c));
+                }
+            }
+        }
+        cells
+    }
+}
+
 //-----------------------------------------------------
 // Environment
 //-----------------------------------------------------
@@ -110,8 +169,7 @@ impl Environment for World {
 
     // Reset world
     fn reset(&mut self) {
-        let new_world = parse_layout(&self.layout, &self.config);
-        *self = new_world;
+        self.reset_with_reposition(false);
     }
 
     fn step(&mut self, actions: HashMap<u32, Action>) -> StepResult {
@@ -180,16 +238,17 @@ impl Environment for World {
             }
         }
 
-        // Check enemy collision (only matters if player is still alive)
-        if check_enemy_collision(self, player_id) {
-            self.done = true;
-            self.end_reason = Some(EndReason::Caught);
-        }
-
         // Check goal (only matters if player is still alive)
         if check_goal(self, player_id) {
             self.done = true;
             self.end_reason = Some(EndReason::GoalReached);
+        }
+
+
+        // Check enemy collision (only matters if player is still alive)
+        if check_enemy_collision(self, player_id) {
+            self.done = true;
+            self.end_reason = Some(EndReason::Caught);
         }
 
         //--------------------------------------------------

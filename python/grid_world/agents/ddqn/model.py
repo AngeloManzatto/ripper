@@ -15,7 +15,7 @@ import torch.nn as nn
 ###############################################################################
 
 class DQN(nn.Module):
-    def __init__(self, height, width, n_actions=4, channels=5):
+    def __init__(self, height, width, n_actions=4, channels=7):
         super().__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(channels, 16, kernel_size=3, padding=1),
