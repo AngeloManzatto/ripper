@@ -24,7 +24,7 @@ ACTIONS = [Action.Up, Action.Down, Action.Left, Action.Right]
 # Evaluate Match
 ###############################################################################
 
-def evaluate_match(agents, agent_ids, world, episodes):
+def evaluate_match(agents, agent_ids, world, episodes, verbose=False):
     
     # Outcomes for each agent. Palyer and Enemy are decided differently
     outcomes = {agent_id: [] for agent_id in agent_ids}
@@ -32,43 +32,50 @@ def evaluate_match(agents, agent_ids, world, episodes):
     for agent, agent_id in zip(agents, agent_ids):
         
         agent.set_eval_mode()
-
-    for _ in range(episodes):
-        world.reset(reposition=True)
-        observation = world.observation()
-        done = False
-        
-        while not done:
-            
-            actions = {}
-            
-            for agent, agent_id in zip(agents, agent_ids):
-                
-                # Get current state for agent
-                state = get_one_hot_grid_for_entity(observation, agent_id)
-                
-                # Play an action given current env state
-                action_idx = agent.act(state)
-                                       
-                # Regist action for agent
-                actions[agent_id] = ACTIONS[action_idx]
-                
-            # Act on env
-            step_result = world.step(actions)
-            
-            # Get current env result
-            done, reason = step_result.done, step_result.reason
-            
-            # Update observation current state
+    
+    try:
+        for ep in range(episodes):
+            world.reset(reposition=True)
             observation = world.observation()
+            done = False
+            ticks = 0
             
-        # Store outcomes
-        for agent_id in agent_ids:
-            outcomes[agent_id].append(str(reason))
-            
-    for agent, agent_id in zip(agents, agent_ids):
-        
-        agent.set_train_mode()
+            while not done:
+                
+                actions = {}
+                
+                for agent, agent_id in zip(agents, agent_ids):
+                    
+                    # Get current state for agent
+                    state = get_one_hot_grid_for_entity(observation, agent_id)
+                    
+                    # Play an action given current env state
+                    action_idx = agent.act(state)
+                                           
+                    # Regist action for agent
+                    actions[agent_id] = ACTIONS[action_idx]
+                    
+                # Act on env
+                step_result = world.step(actions)
+                
+                # Get current env result
+                done, reason = step_result.done, step_result.reason
+                
+                # Update observation current state
+                observation = world.observation()
+                
+                # Update step count
+                ticks += 1
+                
+            # Store outcomes
+            for agent_id in agent_ids:
+                outcomes[agent_id].append(str(reason))
+                
+            if verbose:
+                print(f"    [eval] episode {ep+1}/{episodes} | ticks={ticks} | reason={reason}")
+    finally:
+        for agent in agents:
+            agent.set_train_mode()
         
     player_id = world.get_player_id()
     results = {}
@@ -82,6 +89,9 @@ def evaluate_match(agents, agent_ids, world, episodes):
             "timeout_rate": breakdown.get("EndReason.Timeout", 0) / episodes,
             "breakdown": dict(breakdown),
         }
+        
+    if verbose:
+        print(f"    [eval] done | {results}")
             
     return results
 
