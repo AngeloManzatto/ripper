@@ -10,8 +10,8 @@ Created on Mon Sep 21 21:53:15 2026
 
 from collections import deque, Counter
 
-from agents.reward import reward_for
-from agents.observation import get_one_hot_grid_for_entity
+from agents.reward import calculate_reward
+from agents.observation import get_one_hot_grid_for_entity, get_position_for_entity
 
 from ripper import Action
 
@@ -183,10 +183,24 @@ def train_step(agents, agent_ids, world, observation):
     for agent, agent_id in zip(agents, agent_ids):
         
         # Get current state for agent
+        state = states[agent_id]
         next_state = get_one_hot_grid_for_entity(next_observation, agent_id)
         
+        position = get_position_for_entity(observation, agent_id)
+        next_position  = get_position_for_entity(next_observation, agent_id)
+        
         # Get reward
-        reward = reward_for(reason, agent_id==player_id)
+        reward = calculate_reward(
+            reason=reason, 
+            is_player=agent_id==player_id, 
+            position=position, 
+            state=state, 
+            next_position=next_position, 
+            next_state=next_state,
+            k_novel=0.02, 
+            k_sight=0.15, 
+            k_dist=0.05
+        )
         
         loss = learn_from_transition(
             agent, 

@@ -82,3 +82,10 @@ def get_one_hot_grid_for_entity(observation, entity_id):
             return one_hot_encode_grid(entity_obs.grid)
 
     raise ValueError(f"entity_id '{entity_id}' not found in observation.entities")
+    
+###############################################################################
+# One Hot Encode Grid For Entity
+###############################################################################
+   
+def get_position_for_entity(observation, entity_id):
+    return next(e.position for e in observation.entities if e.id == entity_id)

@@ -60,14 +60,14 @@ n_wall_mutations = 1
 max_wall_density = 0.3
 
 max_enemies = 1
-enemy_add_weight     = 0.4
-enemy_remove_weight  = 0.2
-enemy_nothing_weight = 0.4
+enemy_add_weight     = 0.0
+enemy_remove_weight  = 0.0
+enemy_nothing_weight = 1.0
 
 max_traps = 3
-trap_add_weight     = 0.2
-trap_remove_weight  = 0.1
-trap_nothing_weight = 0.7
+trap_add_weight     = 0.0
+trap_remove_weight  = 0.0
+trap_nothing_weight = 1.0
 
 n_repositions = 1
 min_player_goal_distance = 10
