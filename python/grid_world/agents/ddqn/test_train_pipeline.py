@@ -28,7 +28,7 @@ generation_config = ripper.GenerationConfig(
     height=height,
     wall_density=0.1,
     num_enemies=1,
-    num_traps=0,
+    num_traps=1,
     min_player_goal_distance=10
 )
 
@@ -59,7 +59,7 @@ verbose    = True
 player_agent = build_ddqn_agent(
     width=width, 
     height=height,
-    channels=7,
+    channels=8,
     lr=lr, 
     batch_size=batch_size
 )
@@ -67,7 +67,7 @@ player_agent = build_ddqn_agent(
 enemy_agent = build_ddqn_agent(
     width=width, 
     height=height,
-    channels=7,
+    channels=8,
     lr=lr, 
     batch_size=batch_size
 )

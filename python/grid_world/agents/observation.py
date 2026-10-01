@@ -13,6 +13,12 @@ import numpy as np
 from ripper import Observation
 
 ###############################################################################
+# Trail Channel
+###############################################################################
+
+TRAIL_CHANNEL = 7
+
+###############################################################################
 # Parse Entity Observation
 ###############################################################################
 
@@ -56,8 +62,8 @@ def one_hot_encode_grid(grid):
     grid = np.asarray(grid)
 
     grid_one_hot = np.zeros(
-        (*grid.shape, 7),
-        dtype=np.uint8
+        (*grid.shape, 8),
+        dtype=np.float32
     )
 
     grid_one_hot[grid == -1, 0] = 1  # Unknown
@@ -67,9 +73,9 @@ def one_hot_encode_grid(grid):
     grid_one_hot[grid == 3, 4] = 1   # Enemy
     grid_one_hot[grid == 4, 5] = 1   # Trap
     grid_one_hot[grid == 5, 6] = 1   # Goal
-
+                                     # Trail
+    
     return np.transpose(grid_one_hot, (2, 0, 1))
-
 
 ###############################################################################
 # One Hot Encode Grid For Entity
@@ -89,3 +95,22 @@ def get_one_hot_grid_for_entity(observation, entity_id):
    
 def get_position_for_entity(observation, entity_id):
     return next(e.position for e in observation.entities if e.id == entity_id)
+
+###############################################################################
+# One Hot Encode Grid For Entity
+###############################################################################
+
+WALL_CHANNEL = 2
+
+# (row_delta, col_delta) matching ACTIONS = [Up, Down, Left, Right]
+_ACTION_DELTAS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+def get_legal_action_mask(state, position):
+    _, height, width = state.shape
+    row, col = position
+    mask = [True, True, True, True]
+    for i, (dr, dc) in enumerate(_ACTION_DELTAS):
+        r, c = row + dr, col + dc
+        if r < 0 or r >= height or c < 0 or c >= width or state[WALL_CHANNEL, r, c] == 1:
+            mask[i] = False
+    return mask

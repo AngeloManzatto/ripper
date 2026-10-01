@@ -11,8 +11,8 @@ Created on Mon Sep 21 21:53:15 2026
 from collections import deque, Counter
 
 from agents.reward import calculate_reward
-from agents.observation import get_one_hot_grid_for_entity, get_position_for_entity
-
+from agents.observation import get_one_hot_grid_for_entity, get_position_for_entity, get_legal_action_mask, TRAIL_CHANNEL
+from agents.trail_tracker import TrailTracker
 from ripper import Action
 
 import torch
@@ -145,7 +145,7 @@ def learn_from_transition(agent, state, action_idx, reward, next_state, done):
 # Train step
 ###############################################################################
 
-def train_step(agents, agent_ids, world, observation):
+def train_step(agents, agent_ids, world, observation, trail_trackers):
     
     player_id = world.get_player_id()  # hoisted out of the loop below
 
@@ -157,11 +157,18 @@ def train_step(agents, agent_ids, world, observation):
         
         # Get current state for agent
         state = get_one_hot_grid_for_entity(observation, agent_id)
+        state[TRAIL_CHANNEL] = trail_trackers[agent_id].get_grid() 
         
         states[agent_id] = state
         
+        # Get mask for legal actions
+        position = get_position_for_entity(observation, agent_id)
+        legal_mask = get_legal_action_mask(state, position)
+        
         # Play an action given current env state
         action_idx = agent.act(state)
+        
+        
                                
         # Register action index for agent
         action_indices[agent_id] = action_idx
@@ -178,29 +185,60 @@ def train_step(agents, agent_ids, world, observation):
     # Get state observation after action
     next_observation = world.observation()
     
+    # Detect agents that disappeared this step (e.g. enemy despawned on a trap) --
+    # they won't have an entry in next_observation.entities anymore, so they need
+    # their own terminal transition now, before we try to look up a position/state
+    # for them that no longer exists.
+    next_ids = {entity.id for entity in next_observation.entities}
+    despawned = {agent_id for agent_id in agent_ids if agent_id != player_id and agent_id not in next_ids}
+    
     # Train step for agents
     losses = {}
     for agent, agent_id in zip(agents, agent_ids):
         
         # Get current state for agent
         state = states[agent_id]
-        next_state = get_one_hot_grid_for_entity(next_observation, agent_id)
         
-        position = get_position_for_entity(observation, agent_id)
-        next_position  = get_position_for_entity(next_observation, agent_id)
-        
-        # Get reward
-        reward = calculate_reward(
-            reason=reason, 
-            is_player=agent_id==player_id, 
-            position=position, 
-            state=state, 
-            next_position=next_position, 
-            next_state=next_state,
-            k_novel=0.02, 
-            k_sight=0.15, 
-            k_dist=0.05
-        )
+        if agent_id in despawned:
+            
+            # This agent's own episode just ended even though the world's
+            # episode may still be going for everyone else -- no next_state
+            # exists for it anymore, so we reuse its last known state and
+            # mark it done on its own terms.
+            next_state = state
+            reward = -1.0
+            agent_done = True
+            
+        else:
+            
+            next_state = get_one_hot_grid_for_entity(next_observation, agent_id)
+            
+            position = get_position_for_entity(observation, agent_id)
+            next_position  = get_position_for_entity(next_observation, agent_id)
+            
+            # Read the trail value BEFORE this move updates it -- this is what we're penalizing
+            prior_trail_grid = trail_trackers[agent_id].get_grid()
+            prior_trail_value = prior_trail_grid[next_position[0], next_position[1]]
+            
+            trail_trackers[agent_id].update(next_position)              # <-- record the move
+            next_state[TRAIL_CHANNEL] = trail_trackers[agent_id].get_grid()
+            
+            # Get reward
+            reward = calculate_reward(
+                reason=reason, 
+                is_player=agent_id==player_id, 
+                position=position, 
+                state=state, 
+                next_position=next_position, 
+                next_state=next_state,
+                prior_trail_value=prior_trail_value,
+                k_novel=0.02, 
+                k_sight=0.15, 
+                k_dist=0.05,
+                k_revisit=-0.03, 
+            )
+            
+            agent_done = done
         
         loss = learn_from_transition(
             agent, 
@@ -208,12 +246,12 @@ def train_step(agents, agent_ids, world, observation):
             action_indices[agent_id], 
             reward, 
             next_state, 
-            done
+            agent_done
         )
         
         losses[agent_id] = loss
         
-    return next_observation, done, reason, losses
+    return next_observation, done, reason, losses, despawned
     
 ###############################################################################
 # Train Agents
@@ -238,17 +276,32 @@ def train_agents(agents, agent_ids, world, episodes, verbose=False, log_every=50
         # Initialize done
         done = False
         
+        active_agents, active_ids = list(agents), list(agent_ids)
+        
+        # Fresh trail tracker per agent this episode, seeded with its starting position
+        grid_shape = get_one_hot_grid_for_entity(observation, player_id).shape[1:]  # (height, width)
+        trail_trackers = {
+            agent_id: TrailTracker(grid_shape=grid_shape, maxlen=4)
+            for agent_id in agent_ids
+        }
+        
         while not done:
             
             # Execute train step
-            observation, done, reason, losses = train_step(
-                agents, agent_ids, world, observation
+            observation, done, reason, losses, despawned = train_step(
+                active_agents, active_ids, world, observation, trail_trackers
             )
             
             # Update losses
             for agent_id in losses:
                 if losses[agent_id] is not None:
                     recent_losses[agent_id].append(losses[agent_id])
+                    
+            if despawned:
+                keep = [aid not in despawned for aid in active_ids]
+                active_agents = [a for a, k in zip(active_agents, keep) if k]
+                active_ids   = [i for i, k in zip(active_ids, keep) if k]
+                trail_trackers = {aid: t for aid, t in trail_trackers.items() if aid not in despawned}
                     
         recent_reasons.append(str(reason))
 

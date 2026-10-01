@@ -66,14 +66,26 @@ class DDQNAgent(BaseAgent):
 
     def set_train_mode(self):
         self.epsilon = getattr(self, '_saved_epsilon', self.epsilon)
+        
+    def act(self, observation, legal_mask=None):
 
-    def act(self, observation):
+        if legal_mask is not None and not any(legal_mask):
+            legal_mask = None  # safety: never fully deadlock if something's off
+    
         if random.random() < self.epsilon:
+            if legal_mask is not None:
+                legal_indices = [i for i, ok in enumerate(legal_mask) if ok]
+                return random.choice(legal_indices)
             return random.randint(0, 3)
-
+    
         with torch.no_grad():
             state_tensor = torch.tensor(observation, dtype=torch.float32).unsqueeze(0).to(self.device)
             q_values = self.policy_net(state_tensor)
+    
+            if legal_mask is not None:
+                mask_tensor = torch.tensor(legal_mask, dtype=torch.bool, device=self.device)
+                q_values = q_values.masked_fill(~mask_tensor, float('-inf'))
+    
             return q_values.argmax(dim=1).item()
 
     def decay_epsilon(self):

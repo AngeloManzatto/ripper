@@ -12,7 +12,8 @@ from collections import Counter
 
 from ripper import Action
 
-from agents.observation import get_one_hot_grid_for_entity
+from agents.observation import get_one_hot_grid_for_entity, get_position_for_entity, get_legal_action_mask, TRAIL_CHANNEL
+from agents.trail_tracker import TrailTracker
 
 ###############################################################################
 # Globals
@@ -40,6 +41,13 @@ def evaluate_match(agents, agent_ids, world, episodes, verbose=False):
             done = False
             ticks = 0
             
+            # Fresh trail tracker per agent this episode, seeded with starting position
+            grid_shape = get_one_hot_grid_for_entity(observation, world.get_player_id()).shape[1:]
+            trail_trackers = {
+                agent_id: TrailTracker(grid_shape=grid_shape, maxlen=4)
+                for agent_id in agent_ids
+            }
+ 
             while not done:
                 
                 actions = {}
@@ -48,9 +56,14 @@ def evaluate_match(agents, agent_ids, world, episodes, verbose=False):
                     
                     # Get current state for agent
                     state = get_one_hot_grid_for_entity(observation, agent_id)
+                    state[TRAIL_CHANNEL] = trail_trackers[agent_id].get_grid()
+                    
+                    # Get mask for legal actions
+                    position = get_position_for_entity(observation, agent_id)
+                    legal_mask = get_legal_action_mask(state, position)
                     
                     # Play an action given current env state
-                    action_idx = agent.act(state)
+                    action_idx = agent.act(state, legal_mask)
                                            
                     # Regist action for agent
                     actions[agent_id] = ACTIONS[action_idx]
@@ -63,6 +76,12 @@ def evaluate_match(agents, agent_ids, world, episodes, verbose=False):
                 
                 # Update observation current state
                 observation = world.observation()
+                
+                # Record the move each (still-present) agent just made
+                next_ids = {entity.id for entity in observation.entities}
+                for agent_id in agent_ids:
+                    if agent_id in next_ids:
+                        trail_trackers[agent_id].update(get_position_for_entity(observation, agent_id))
                 
                 # Update step count
                 ticks += 1

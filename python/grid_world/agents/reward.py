@@ -24,6 +24,9 @@ PLAYER_CHANNEL = 3  # what the enemy is looking for
 
 def reward_for(reason, is_player):
     reward = -0.1
+    
+    if reason == EndReason.Timeout:
+        return -10
 
     if is_player:
         if reason == EndReason.GoalReached:
@@ -79,6 +82,13 @@ def reward_for_distance(own_pos, own_pos_next, state, next_state, channel, k=0.0
     return k * (dist_before - dist_after)
 
 ###############################################################################
+# Revisit penalty -- discourage stepping onto a cell you've recently trailed
+###############################################################################
+
+def reward_for_revisit(prior_trail_value, k=-0.03):
+    return k * prior_trail_value
+
+###############################################################################
 # Composed reward per role
 ###############################################################################
 
@@ -87,9 +97,11 @@ def calculate_reward(
         is_player, 
         position, state, 
         next_position, next_state,
+        prior_trail_value=0.0, 
         k_novel=0.02, 
         k_sight=0.15, 
-        k_dist=0.05
+        k_dist=0.05,
+        k_revisit=-0.03, 
     ):
     
     
@@ -99,6 +111,7 @@ def calculate_reward(
     reward += reward_for_novelty(state, next_state, k=k_novel)
     reward += reward_for_sighting(state, next_state, channel, k=k_sight)
     reward += reward_for_distance(position, next_position, state, next_state, channel, k=k_dist)
+    reward += reward_for_revisit(prior_trail_value, k=k_revisit)  
 
     return reward
 

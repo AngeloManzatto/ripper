@@ -2,6 +2,10 @@
 // Libraries
 //-----------------------------------------------------
 
+fn main() {
+
+}
+/* 
 use macroquad::prelude::*;
 use std::collections::HashMap;
 
@@ -135,3 +139,5 @@ fn draw_world(world: &World, visible_cells: &Vec<(usize, usize)>, discovered: &s
         }
     }
 }
+
+*/

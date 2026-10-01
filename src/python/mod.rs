@@ -1,7 +1,7 @@
 //-----------------------------------------------------
 // Modules
 //-----------------------------------------------------
-
+/* 
 pub mod grid_world;  
 
 //-----------------------------------------------------
@@ -20,7 +20,7 @@ fn ripper(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<grid_world::PyWorld>()?;
     m.add_class::<grid_world::PyObservation>()?;
     m.add_class::<grid_world::PyEntityObservation>()?;
-    m.add_class::<grid_world::PyStepResult>()?;
+    m.add_class::<grid_world::PyState>()?;
     m.add_class::<grid_world::PyEndReason>()?;
     m.add_class::<grid_world::PyAction>()?;
     m.add_class::<grid_world::PyGenerationConfig>()?;
@@ -29,3 +29,4 @@ fn ripper(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(grid_world::mutate_valid_layout_py, m)?)?;
     Ok(())
 }
+    */

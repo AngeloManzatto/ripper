@@ -7,7 +7,8 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::usize;
 
-use crate::grid_world::entity::EntityKind;
+use crate::grid_world::ecs::Ecs;
+use crate::grid_world::entity::{EntityKind, EntityStatus, TileKind};
 use crate::grid_world::action::Action;
 use crate::grid_world::layout::{parse_layout};
 use crate::grid_world::environment::Environment;
@@ -35,14 +36,39 @@ impl Default for WorldConfig {
 }
 
 //-----------------------------------------------------
-// Observation
+// Cell encoding
+//-----------------------------------------------------
+
+fn entity_kind_to_cell(kind: EntityKind) -> i32 {
+    match kind {
+        EntityKind::Player => 2,
+        EntityKind::Enemy  => 3,
+    }
+}
+
+fn tile_kind_to_cell(kind: TileKind) -> i32 {
+    match kind {
+        TileKind::Free => 0,
+        TileKind::Wall => 1,
+        TileKind::Trap => 4,
+        TileKind::Goal => 5,
+    }
+}
+
+//-----------------------------------------------------
+// Entity Observation
 //-----------------------------------------------------
 
 pub struct EntityObservation {
     pub id: u32,
     pub position: (usize, usize),
     pub grid: Vec<Vec<i32>>,
+    pub status: EntityStatus
 }
+
+//-----------------------------------------------------
+// Observation
+//-----------------------------------------------------
 
 pub struct Observation {
     pub entities: Vec<EntityObservation>,
@@ -51,34 +77,19 @@ pub struct Observation {
 }
 
 //-----------------------------------------------------
-// Cell encoding
+// Observation
 //-----------------------------------------------------
 
-fn kind_to_cell(kind: EntityKind) -> i32 {
-    match kind {
-        EntityKind::Wall   => 1,
-        EntityKind::Player => 2,
-        EntityKind::Enemy  => 3,
-        EntityKind::Trap   => 4,
-        EntityKind::Goal   => 5,
+pub struct TimeStep {
+    pub observation : Observation,
+    pub terminated : bool,
+    pub truncated : bool,
+}
+
+impl TimeStep {
+    pub fn done(&self) -> bool {
+        self.terminated || self.truncated
     }
-}
-
-//-----------------------------------------------------
-// Step Result 
-//-----------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EndReason {
-    GoalReached,
-    Caught,
-    Trapped,
-    Timeout,
-}
-
-pub struct StepResult {
-    pub done: bool,
-    pub reason: Option<EndReason>,
 }
 
 //-----------------------------------------------------
@@ -89,25 +100,28 @@ pub struct World {
     pub width: usize,
     pub height: usize,
     pub next_id: u32,
-    pub positions  : HashMap<u32, (usize, usize)>,
-    pub kinds      : HashMap<u32, EntityKind>,
-    pub discovered : HashMap<u32, std::collections::HashSet<(usize, usize)>>,
-    pub perception_ranges: HashMap<u32, usize>,
+    pub ecs: Ecs,
     pub layout: String,
     pub done: bool,
-    pub end_reason: Option<EndReason>,
     pub tick: u32,
-    pub config:WorldConfig
+    pub config: WorldConfig,
 }
+
+//-------------------------
+// Get entity status
+//-------------------------
+
 
 impl World {
 
-    pub fn reset_with_reposition(&mut self, reposition: bool) {
+    pub fn reset_with_reposition(&mut self, reposition: bool) -> Observation{
         let new_world = parse_layout(&self.layout, &self.config);
         *self = new_world;
         if reposition {
             self.reposition_entities();
-        }
+        };
+
+        self.observation()
     }
 
     fn reposition_entities(&mut self) {
@@ -168,18 +182,23 @@ impl Environment for World {
     type Observation = Observation;
 
     // Reset world
-    fn reset(&mut self) {
+    fn reset(&mut self) -> Observation {
         self.reset_with_reposition(false);
+
+        self.observation()
     }
 
-    fn step(&mut self, actions: HashMap<u32, Action>) -> StepResult {
+    fn step(&mut self, actions: HashMap<u32, Action>) -> State {
+
+        // While game is still running
+        self.end_reason = Some(EndReason::NotFinished);
 
         //--------------------------------------------------
         // Done resolution
         //--------------------------------------------------
 
         if self.done {
-            return StepResult { done: self.done, reason: self.end_reason };
+            return State { done: self.done, reason: self.end_reason };
         }
 
         //--------------------------------------------------
@@ -193,7 +212,7 @@ impl Environment for World {
         if self.tick >= self.config.max_tick {
             self.done = true;
             self.end_reason = Some(EndReason::Timeout);
-            return StepResult { done: self.done, reason: self.end_reason };
+            return State { done: self.done, reason: self.end_reason };
         }
 
         //--------------------------------------------------
@@ -262,13 +281,14 @@ impl Environment for World {
             }
         }
 
-        StepResult { done: self.done, reason: self.end_reason }
+        State { done: self.done, reason: self.end_reason }
     }
 
    fn observation(&self) -> Observation {
     
         let entities: Vec<EntityObservation> = self.positions.iter()
             .filter_map(|(&id, &pos)| {
+                
                 let discovered = self.discovered.get(&id)?;
                 let perception_range = *self.perception_ranges.get(&id)?;
 

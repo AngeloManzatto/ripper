@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 use std::collections::HashMap;
 
 use crate::grid_world::entity::EntityKind;
-use crate::grid_world::world::{self, Observation, EndReason, StepResult, get_entity_ids_by_kind};
+use crate::grid_world::world::{self, Observation, EndReason, State, get_entity_ids_by_kind};
 use crate::grid_world::world::World;
 use crate::grid_world::environment::Environment;
 use crate::grid_world::action::Action;
@@ -252,12 +252,13 @@ pub fn mutate_valid_layout_py(layout_str: String, config: &PyMutationConfig, max
 //-----------------------------------------------------
 
 #[pyclass(name = "EndReason", eq, eq_int, from_py_object)]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Debug, Copy, PartialEq)]
 pub enum PyEndReason {
     GoalReached,
     Caught,
     Trapped,
     Timeout,
+    NotFinished
 }
 
 impl From<EndReason> for PyEndReason {
@@ -267,6 +268,7 @@ impl From<EndReason> for PyEndReason {
             EndReason::Caught      => PyEndReason::Caught,
             EndReason::Trapped     => PyEndReason::Trapped,
             EndReason::Timeout     => PyEndReason::Timeout,
+            EndReason::NotFinished => PyEndReason::NotFinished,
         }
     }
 }
@@ -320,6 +322,18 @@ impl From<world::EntityObservation> for PyEntityObservation {
     }
 }
 
+#[pymethods]
+impl PyEntityObservation {
+    fn __repr__(&self) -> String {
+        let rows = self.grid.len();
+        let cols = self.grid.first().map_or(0, |r| r.len());
+        format!(
+            "EntityObservation(id={}, position={:?}, grid={}x{})",
+            self.id, self.position, rows, cols,
+        )
+    }
+}
+
 //-----------------------------------------------------
 // Observation
 //-----------------------------------------------------
@@ -344,21 +358,41 @@ impl From<Observation> for PyObservation {
     }
 }
 
+#[pymethods]
+impl PyObservation {
+    fn __repr__(&self) -> String {
+        format!(
+            "Observation(player_id={}, enemy_ids={:?}, entities=[{} entities])",
+            self.player_id,
+            self.enemy_ids,
+            self.entities.len(),
+        )
+    }
+}
+
+
 //-----------------------------------------------------
 // Step Result
 //-----------------------------------------------------
-#[pyclass(name = "StepResult")]
-pub struct PyStepResult {
+#[pyclass(name = "State")]
+pub struct PyState {
     #[pyo3(get)]
     pub done: bool,
     #[pyo3(get)]
     pub reason: Option<PyEndReason>,
 }
 
-impl From<StepResult> for PyStepResult {
-    fn from(result: StepResult) -> Self {
+impl From<State> for PyState {
+    fn from(result: State) -> Self {
         let reason = result.reason.map(|r| r.into());
-        PyStepResult { done: result.done, reason }
+        PyState { done: result.done, reason }
+    }
+}
+
+#[pymethods]
+impl PyState {
+    fn __repr__(&self) -> String {
+        format!("State(done={}, reason={:?})", self.done, self.reason)
     }
 }
 
@@ -394,11 +428,11 @@ impl PyWorld {
     }
 
     #[pyo3(signature = (reposition=false))]
-    fn reset(&mut self, reposition: bool) {
-        self.world.reset_with_reposition(reposition);
+    fn reset(&mut self, reposition: bool) -> PyObservation{
+        self.world.reset_with_reposition(reposition).into()
     }
 
-    fn step(&mut self, actions: HashMap<u32, PyAction>) -> PyResult<PyStepResult> {
+    fn step(&mut self, actions: HashMap<u32, PyAction>) -> PyResult<PyState> {
         let parsed: HashMap<u32, Action> = actions.into_iter()
             .map(|(id, py_action)| (id, py_action.into()))
             .collect();
