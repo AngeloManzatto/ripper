@@ -3,12 +3,10 @@
 //-----------------------------------------------------
 
 use rand::Rng;
-
 use rand::seq::SliceRandom;
 
+use crate::grid_world::layout::parsers;
 use crate::grid_world::pathfinding::regions;
-use rand::SeedableRng;
-use rand::rngs::StdRng;
 
 //-----------------------------------------------------
 // Generation
@@ -115,7 +113,7 @@ fn get_grid_empty_cells(grid: &Vec<Vec<char>>) -> Vec<(usize, usize)>
 
     for row in 0..height{
         for col in 0..width {
-            if grid[col][row] == '.' {
+            if grid[row][col] == '.' {
                 empty_cells.push((row, col));
             }
         }
@@ -227,24 +225,10 @@ pub fn generate_layout(config: &GenerationConfig, rng: &mut impl Rng) -> Option<
     }
 
     // 8) Serialize to String.
-    let layout_string = grid.iter()
-    .map(|row| row.iter().collect::<String>())
-    .collect::<Vec<String>>()
-    .join("\n");
+    let layout_string = parsers::grid_to_layout(&grid);
 
     Some(layout_string)
 
-}
-
-//-----------------------------------------------------
-// Parse layout to grid
-//-----------------------------------------------------
-
-pub fn parse_layout_to_grid(layout: &str) -> Vec<Vec<char>> {
-    layout
-        .lines()
-        .map(|line| line.chars().collect())
-        .collect()
 }
 
 //-----------------------------------------------------
@@ -266,6 +250,9 @@ fn print_grid(grid: &Vec<Vec<char>>) {
 mod tests {
 
     use super::*;
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+
 
     #[test]
     fn test_add_random_walls_to_grid_deterministic() {
