@@ -340,3 +340,106 @@ pub fn mutate_layout(layout: &str, config: &MutationConfig, rng: &mut impl Rng) 
     Some(layout_string) 
 
 }
+
+//-----------------------------------------------------
+// Tests
+//-----------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::grid_world::layout::{parsers, validate};
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+
+    fn sample_layout() -> &'static str {
+        "##########\n\
+         #........#\n\
+         #..E...T.#\n\
+         #....P...#\n\
+         #........#\n\
+         #.......G#\n\
+         #........#\n\
+         ##########"
+    }
+
+    #[test]
+    fn test_mutate_layout_deterministic() {
+        let config = MutationConfig::default();
+
+        let mut rng1 = StdRng::seed_from_u64(42);
+        let result1 = mutate_layout(sample_layout(), &config, &mut rng1)
+            .expect("mutation should succeed");
+
+        let mut rng2 = StdRng::seed_from_u64(42);
+        let result2 = mutate_layout(sample_layout(), &config, &mut rng2)
+            .expect("mutation should succeed");
+
+        assert_eq!(result1, result2);
+    }
+
+    #[test]
+    fn test_mutate_layout_preserves_dimensions() {
+        let config = MutationConfig::default();
+        let mut rng = StdRng::seed_from_u64(7);
+
+        let mutated = mutate_layout(sample_layout(), &config, &mut rng)
+            .expect("mutation should succeed");
+        let grid = parsers::layout_to_grid(&mutated);
+        let original = parsers::layout_to_grid(sample_layout());
+
+        assert_eq!(grid.len(), original.len());
+        assert_eq!(grid[0].len(), original[0].len());
+    }
+
+    #[test]
+    fn test_mutate_layout_keeps_single_player_and_goal() {
+        let config = MutationConfig::default();
+        let mut rng = StdRng::seed_from_u64(7);
+
+        let mutated = mutate_layout(sample_layout(), &config, &mut rng)
+            .expect("mutation should succeed");
+        let grid = parsers::layout_to_grid(&mutated);
+
+        let p_count = grid.iter().flatten().filter(|&&c| c == 'P').count();
+        let g_count = grid.iter().flatten().filter(|&&c| c == 'G').count();
+
+        assert_eq!(p_count, 1, "expected exactly one Player");
+        assert_eq!(g_count, 1, "expected exactly one Goal");
+    }
+
+    #[test]
+    fn test_mutate_layout_border_untouched() {
+        let config = MutationConfig::default();
+        let mut rng = StdRng::seed_from_u64(7);
+
+        let mutated = mutate_layout(sample_layout(), &config, &mut rng)
+            .expect("mutation should succeed");
+        let grid = parsers::layout_to_grid(&mutated);
+        let (height, width) = (grid.len(), grid[0].len());
+
+        for col in 0..width {
+            assert_eq!(grid[0][col], '#');
+            assert_eq!(grid[height - 1][col], '#');
+        }
+        for row in 0..height {
+            assert_eq!(grid[row][0], '#');
+            assert_eq!(grid[row][width - 1], '#');
+        }
+    }
+
+    #[test]
+    fn test_mutate_layout_reachability_is_not_yet_guaranteed() {
+        // mutate_layout can disconnect the goal (e.g. a wall toggle sealing
+        // off a region) -- it does NOT retry on failure. This test just
+        // documents current behavior; mutate_valid_layout is what will
+        // enforce reachability via retries.
+        let config = MutationConfig::default();
+        let mut rng = StdRng::seed_from_u64(7);
+
+        let mutated = mutate_layout(sample_layout(), &config, &mut rng)
+            .expect("mutation should succeed");
+
+        println!("reachable: {}", validate::is_layout_reachable(&mutated));
+    }
+}
