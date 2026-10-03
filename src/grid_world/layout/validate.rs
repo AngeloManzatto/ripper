@@ -1,12 +1,12 @@
 //-----------------------------------------------------
-// Imports 
+// Imports
 //-----------------------------------------------------
 
-use crate::grid_world::pathfinding::bfs;
 use crate::grid_world::layout;
+use crate::grid_world::pathfinding::bfs;
 
 //-----------------------------------------------------
-// Is layout reachable 
+// Is layout reachable
 //-----------------------------------------------------
 
 pub fn is_layout_reachable(layout: &str) -> bool {

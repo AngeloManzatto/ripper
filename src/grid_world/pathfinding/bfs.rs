@@ -2,9 +2,9 @@
 // Imports
 //-----------------------------------------------------
 
-use std::collections::VecDeque;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::VecDeque;
 
 use crate::grid_world::pathfinding::geometry;
 use crate::grid_world::pathfinding::grid;
@@ -14,14 +14,13 @@ use crate::grid_world::pathfinding::grid;
 //-----------------------------------------------------
 
 pub fn bfs_search(
-    grid: Vec<Vec<char>>, 
+    grid: Vec<Vec<char>>,
     start: (usize, usize),
     target: (usize, usize),
-    avoid: Vec<char>
-) -> Option<Vec<(usize, usize)>>
-{
+    avoid: Vec<char>,
+) -> Option<Vec<(usize, usize)>> {
     /*--------------------------------------------------------------------------
-    
+
     Algorithm:
     1. Push `start` onto a deque list (FIFO)
     2. Repeatedly pop the first cell on the deque list
@@ -33,21 +32,22 @@ pub fn bfs_search(
         parent (for path reconstruction) the first time it is discovered, and
         push it onto the deque.
     3. If the deque empties out without ever reaching `target`, no path exists.
-    
+
     --------------------------------------------------------------------------*/
 
     let mut frontier = VecDeque::new();
     frontier.push_back(start);
 
-    let mut visited:HashSet<(usize, usize)> = HashSet::new();
+    let mut visited: HashSet<(usize, usize)> = HashSet::new();
     let mut map: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
-    let path:Vec<(usize, usize)> = Vec::new();
+    let path: Vec<(usize, usize)> = Vec::new();
 
     // # If already at the target, do nothing
-    if start == target { return Some(path); }
+    if start == target {
+        return Some(path);
+    }
 
     while let Some(current) = frontier.pop_front() {
-        
         // If we already visited this cell skip it
         if visited.contains(&current) {
             continue;
@@ -57,8 +57,7 @@ pub fn bfs_search(
         visited.insert(current);
 
         // If we reach the goal build result from reverse path from mapped nodes
-        if current == target { 
-
+        if current == target {
             let mut result = vec![current];
             let mut node = current;
 
@@ -72,8 +71,7 @@ pub fn bfs_search(
         }
 
         // Check neighbors
-        for (nr, nc) in geometry::neighbors(current) 
-        {
+        for (nr, nc) in geometry::neighbors(current) {
             if grid::is_blocked(&grid, nr, nc, &avoid) {
                 continue;
             }
@@ -89,10 +87,8 @@ pub fn bfs_search(
 
             frontier.push_back(neighbor);
         }
-
     }
 
-    
     None
 }
 
@@ -108,78 +104,62 @@ mod tests {
     fn test_shortest_path() {
         // Path find
 
-        let grid= vec![
-            vec!['.', '#', '#', '#', '#'], 
-            vec!['.', '.', '.', '.', '#'], 
-            vec!['.', '#', '#', '.', '.'], 
-            vec!['.', '#', '#', '.', '#'],  
-            vec!['.', '.', '.', ',', '#'],];
+        let grid = vec![
+            vec!['.', '#', '#', '#', '#'],
+            vec!['.', '.', '.', '.', '#'],
+            vec!['.', '#', '#', '.', '.'],
+            vec!['.', '#', '#', '.', '#'],
+            vec!['.', '.', '.', ',', '#'],
+        ];
 
         let start = (0, 0);
         let target = (2, 4);
         let avoid = vec!['#', 'T'];
 
-        let path = bfs_search(
-            grid, 
-            start, 
-            target,
-            avoid
-        );
+        let path = bfs_search(grid, start, target, avoid);
 
         println!("Path found {:?}", path);
-
     }
 
     #[test]
     fn test_no_path_exists() {
         // Path find
 
-        let grid= vec![
-            vec!['#', '#', '#', '#', '#'], 
-            vec!['#', '.', '#', '.', '#'], 
-            vec!['#', '.', '#', '.', '#'], 
-            vec!['#', '#', '#', '.', '#'],  
-            vec!['#', '#', '#', '#', '#'],];
+        let grid = vec![
+            vec!['#', '#', '#', '#', '#'],
+            vec!['#', '.', '#', '.', '#'],
+            vec!['#', '.', '#', '.', '#'],
+            vec!['#', '#', '#', '.', '#'],
+            vec!['#', '#', '#', '#', '#'],
+        ];
 
         let start = (1, 1);
         let target = (3, 3);
         let avoid = vec!['#', 'T'];
 
-        let path = bfs_search(
-            grid, 
-            start, 
-            target,
-            avoid
-        );
+        let path = bfs_search(grid, start, target, avoid);
 
         println!("Path found {:?}", path);
-
     }
 
     #[test]
     fn test_avoid_hazard() {
         // Path find
 
-        let grid= vec![
-            vec!['.', '#', '#', '#', '#'], 
-            vec!['.', '.', '.', 'T', '#'], 
-            vec!['.', '#', '#', '.', '.'], 
-            vec!['.', '#', '#', '.', '#'],  
-            vec!['.', '.', '.', ',', '#'],];
+        let grid = vec![
+            vec!['.', '#', '#', '#', '#'],
+            vec!['.', '.', '.', 'T', '#'],
+            vec!['.', '#', '#', '.', '.'],
+            vec!['.', '#', '#', '.', '#'],
+            vec!['.', '.', '.', ',', '#'],
+        ];
 
         let start = (0, 0);
         let target = (2, 4);
         let avoid = vec!['#', 'T'];
 
-        let path = bfs_search(
-            grid, 
-            start, 
-            target,
-            avoid
-        );
+        let path = bfs_search(grid, start, target, avoid);
 
         println!("Path found {:?}", path);
-
     }
-
 }

@@ -3,8 +3,8 @@
 //-----------------------------------------------------
 
 use rand::Rng;
+use rand::distributions::{Distribution, WeightedIndex};
 use rand::seq::SliceRandom;
-use rand::distributions::{WeightedIndex, Distribution};
 
 use std::collections::HashMap;
 
@@ -34,9 +34,9 @@ pub struct MutationConfig {
 
     // Reposition mutation
     pub n_repositions: usize,
-    pub min_player_goal_distance: usize, 
+    pub min_player_goal_distance: usize,
 
-    pub seed: Option<u64>
+    pub seed: Option<u64>,
 }
 
 impl Default for MutationConfig {
@@ -58,7 +58,7 @@ impl Default for MutationConfig {
             n_repositions: 1,
             min_player_goal_distance: 0,
 
-            seed : Some(0)
+            seed: Some(0),
         }
     }
 }
@@ -68,23 +68,18 @@ impl Default for MutationConfig {
 //-----------------------------------------------------
 
 fn mutate_walls(
-    grid: &mut Vec<Vec<char>>, 
+    grid: &mut Vec<Vec<char>>,
     map_positions: &mut HashMap<char, Vec<(usize, usize)>>,
     config: &MutationConfig,
-    rng: &mut impl Rng
-)
-{
-
+    rng: &mut impl Rng,
+) {
     let height = grid.len();
     let width = grid[0].len();
 
     let interior_cells = (height - 2) * (width - 2);
-    let mut wall_count = map_positions
-                                .get(&'#')
-                                .map(|v| v.len()).unwrap_or(0);
-    
-    for _n in 0..config.n_wall_mutations {
+    let mut wall_count = map_positions.get(&'#').map(|v| v.len()).unwrap_or(0);
 
+    for _n in 0..config.n_wall_mutations {
         // Borrow vectors to mutation from hashmap
         let mut empty_positions = map_positions.remove(&'.').unwrap_or_default();
         let mut wall_positions = map_positions.remove(&'#').unwrap_or_default();
@@ -92,7 +87,6 @@ fn mutate_walls(
 
         // If we still have empty spaces and current wall density is below limit change it to wall
         if !empty_positions.is_empty() && curr_wall_density <= config.max_wall_density {
-
             // Get a random emtpy position
             let idx = rng.gen_range(0..empty_positions.len());
             let pos = empty_positions.remove(idx);
@@ -103,9 +97,7 @@ fn mutate_walls(
             // Update wall position vector and wall density count
             wall_positions.push(pos);
             wall_count += 1;
-
         } else if !wall_positions.is_empty() {
-
             // Get a random wall position
             let idx = rng.gen_range(0..wall_positions.len());
             let pos = wall_positions.remove(idx);
@@ -113,7 +105,7 @@ fn mutate_walls(
             // Turn it into an empty space
             grid[pos.0][pos.1] = '.';
 
-            // Update empty vector and wall density count 
+            // Update empty vector and wall density count
             empty_positions.push(pos);
             wall_count -= 1;
         }
@@ -121,9 +113,7 @@ fn mutate_walls(
         // Return vectors to hashmap
         map_positions.insert('.', empty_positions);
         map_positions.insert('#', wall_positions);
-        
     }
-
 }
 
 //-----------------------------------------------------
@@ -153,18 +143,17 @@ fn roll_mutation_type(
 }
 
 fn mutate_entity(
-    grid: &mut Vec<Vec<char>>, 
+    grid: &mut Vec<Vec<char>>,
     map_positions: &mut HashMap<char, Vec<(usize, usize)>>,
-    entity_type: char, 
+    entity_type: char,
     max_count: usize,
     mutation_type: MutationType,
-    rng: &mut impl Rng
-)
-{
-
-    let n_entities = map_positions.get(&entity_type)
-                                         .map(|v| v.len())
-                                         .unwrap_or(0);
+    rng: &mut impl Rng,
+) {
+    let n_entities = map_positions
+        .get(&entity_type)
+        .map(|v| v.len())
+        .unwrap_or(0);
 
     // Borrow vectors to mutation from hashmap
     let mut empty_positions = map_positions.remove(&'.').unwrap_or_default();
@@ -173,7 +162,6 @@ fn mutate_entity(
     match mutation_type {
         MutationType::Add => {
             if n_entities < max_count && !empty_positions.is_empty() {
-
                 // Get a random emtpy position
                 let idx = rng.gen_range(0..empty_positions.len());
                 let pos = empty_positions.remove(idx);
@@ -183,7 +171,6 @@ fn mutate_entity(
 
                 // Update entity vector
                 entity_positions.push(pos);
-
             }
         }
         MutationType::Remove => {
@@ -198,16 +185,12 @@ fn mutate_entity(
                 empty_positions.push(pos);
             }
         }
-        MutationType::Nothing => {
-
-        }
-        
+        MutationType::Nothing => {}
     }
 
     // Return vectors to hashmap
     map_positions.insert('.', empty_positions);
     map_positions.insert(entity_type, entity_positions);
-
 }
 
 //-----------------------------------------------------
@@ -218,9 +201,8 @@ fn mutate_repositions(
     grid: &mut Vec<Vec<char>>,
     map_positions: &mut HashMap<char, Vec<(usize, usize)>>,
     n_repositions: usize,
-    rng: &mut impl Rng
-) -> Option<()>
-{
+    rng: &mut impl Rng,
+) -> Option<()> {
     let entity_chars = ['P', 'G', 'E', 'T'];
     let mut all_entities: Vec<(char, (usize, usize))> = Vec::new();
 
@@ -266,8 +248,7 @@ fn mutate_repositions(
 // Mutate Layout
 //-----------------------------------------------------
 
-pub fn mutate_layout(layout: &str, config: &MutationConfig, rng: &mut impl Rng) -> Option<String>
-{
+pub fn mutate_layout(layout: &str, config: &MutationConfig, rng: &mut impl Rng) -> Option<String> {
     // Turn the layout into a grid of chars
     let mut grid = parsers::layout_to_grid(layout);
     let height = grid.len();
@@ -279,7 +260,10 @@ pub fn mutate_layout(layout: &str, config: &MutationConfig, rng: &mut impl Rng) 
     for row in 1..height - 1 {
         for col in 1..width - 1 {
             let ch = grid[row][col];
-            map_positions.entry(ch).or_insert_with(Vec::new).push((row, col));
+            map_positions
+                .entry(ch)
+                .or_insert_with(Vec::new)
+                .push((row, col));
         }
     }
 
@@ -293,52 +277,51 @@ pub fn mutate_layout(layout: &str, config: &MutationConfig, rng: &mut impl Rng) 
     // Mutate enemies
     //--------------------------------------------------
     let enemy_mutation = roll_mutation_type(
-        config.enemy_add_weight, 
-        config.enemy_remove_weight, 
+        config.enemy_add_weight,
+        config.enemy_remove_weight,
         config.enemy_nothing_weight,
-        rng
+        rng,
     );
 
     mutate_entity(
-        &mut grid, 
-        &mut map_positions, 
-        'E', 
-        config.max_enemies as usize, 
+        &mut grid,
+        &mut map_positions,
+        'E',
+        config.max_enemies as usize,
         enemy_mutation,
-        rng
+        rng,
     );
 
     //--------------------------------------------------
     // Mutate traps
     //--------------------------------------------------
     let trap_mutation = roll_mutation_type(
-        config.trap_add_weight, 
-        config.trap_remove_weight, 
-        config.trap_nothing_weight, 
-        rng
+        config.trap_add_weight,
+        config.trap_remove_weight,
+        config.trap_nothing_weight,
+        rng,
     );
 
     mutate_entity(
-        &mut grid, 
-        &mut map_positions, 
-        'T', 
-        config.max_traps as usize, 
+        &mut grid,
+        &mut map_positions,
+        'T',
+        config.max_traps as usize,
         trap_mutation,
-        rng
+        rng,
     );
 
     //--------------------------------------------------
     // Mutate reposition
-    //--------------------------------------------------     
-    mutate_repositions(&mut grid, &mut map_positions, config.n_repositions, rng)?;  
+    //--------------------------------------------------
+    mutate_repositions(&mut grid, &mut map_positions, config.n_repositions, rng)?;
 
     //--------------------------------------------------
     // Convert mutated grid into string again
     //--------------------------------------------------
     let layout_string = parsers::grid_to_layout(&grid);
 
-    Some(layout_string) 
-
+    Some(layout_string)
 }
 
 //-----------------------------------------------------
@@ -368,12 +351,12 @@ mod tests {
         let config = MutationConfig::default();
 
         let mut rng1 = StdRng::seed_from_u64(42);
-        let result1 = mutate_layout(sample_layout(), &config, &mut rng1)
-            .expect("mutation should succeed");
+        let result1 =
+            mutate_layout(sample_layout(), &config, &mut rng1).expect("mutation should succeed");
 
         let mut rng2 = StdRng::seed_from_u64(42);
-        let result2 = mutate_layout(sample_layout(), &config, &mut rng2)
-            .expect("mutation should succeed");
+        let result2 =
+            mutate_layout(sample_layout(), &config, &mut rng2).expect("mutation should succeed");
 
         assert_eq!(result1, result2);
     }
@@ -383,8 +366,8 @@ mod tests {
         let config = MutationConfig::default();
         let mut rng = StdRng::seed_from_u64(7);
 
-        let mutated = mutate_layout(sample_layout(), &config, &mut rng)
-            .expect("mutation should succeed");
+        let mutated =
+            mutate_layout(sample_layout(), &config, &mut rng).expect("mutation should succeed");
         let grid = parsers::layout_to_grid(&mutated);
         let original = parsers::layout_to_grid(sample_layout());
 
@@ -397,8 +380,8 @@ mod tests {
         let config = MutationConfig::default();
         let mut rng = StdRng::seed_from_u64(7);
 
-        let mutated = mutate_layout(sample_layout(), &config, &mut rng)
-            .expect("mutation should succeed");
+        let mutated =
+            mutate_layout(sample_layout(), &config, &mut rng).expect("mutation should succeed");
         let grid = parsers::layout_to_grid(&mutated);
 
         let p_count = grid.iter().flatten().filter(|&&c| c == 'P').count();
@@ -413,8 +396,8 @@ mod tests {
         let config = MutationConfig::default();
         let mut rng = StdRng::seed_from_u64(7);
 
-        let mutated = mutate_layout(sample_layout(), &config, &mut rng)
-            .expect("mutation should succeed");
+        let mutated =
+            mutate_layout(sample_layout(), &config, &mut rng).expect("mutation should succeed");
         let grid = parsers::layout_to_grid(&mutated);
         let (height, width) = (grid.len(), grid[0].len());
 
@@ -437,8 +420,8 @@ mod tests {
         let config = MutationConfig::default();
         let mut rng = StdRng::seed_from_u64(7);
 
-        let mutated = mutate_layout(sample_layout(), &config, &mut rng)
-            .expect("mutation should succeed");
+        let mutated =
+            mutate_layout(sample_layout(), &config, &mut rng).expect("mutation should succeed");
 
         println!("reachable: {}", validate::is_layout_reachable(&mutated));
     }

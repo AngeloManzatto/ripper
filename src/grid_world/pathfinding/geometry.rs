@@ -11,7 +11,6 @@ pub fn manhattan_distance(a: (usize, usize), b: (usize, usize)) -> i32 {
 //-----------------------------------------------------
 
 pub fn neighbors(pos: (usize, usize)) -> Vec<(i32, i32)> {
-
     // Creates a vector with all directions delta
 
     let (x, y) = (pos.0 as i32, pos.1 as i32);
@@ -19,7 +18,7 @@ pub fn neighbors(pos: (usize, usize)) -> Vec<(i32, i32)> {
 }
 
 //-----------------------------------------------------
-// Trace Line 
+// Trace Line
 //-----------------------------------------------------
 
 pub fn trace_line(from: (usize, usize), to: (usize, usize)) -> Vec<(usize, usize)> {
@@ -31,7 +30,7 @@ pub fn trace_line(from: (usize, usize), to: (usize, usize)) -> Vec<(usize, usize
     let y1 = to.1 as i32;
 
     let dx = (x1 - x0).abs();
-    let dy = -(y1 - y0).abs();  // note the negative sign, explained below
+    let dy = -(y1 - y0).abs(); // note the negative sign, explained below
     let sx = if x0 < x1 { 1 } else { -1 };
     let sy = if y0 < y1 { 1 } else { -1 };
     let mut err = dx + dy;

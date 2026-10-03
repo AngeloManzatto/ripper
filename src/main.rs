@@ -1,7 +1,7 @@
 //-----------------------------------------------------
 // Libraries
 //-----------------------------------------------------
-/* 
+/*
 use ripper::grid_world::layout;
 use ripper::grid_world::world;
 use ripper::grid_world::render;
@@ -10,8 +10,4 @@ use ripper::grid_world::render;
 // Main Function
 //-----------------------------------------------------
 
-fn main() {
-
-    
-}
-
+fn main() {}

@@ -5,10 +5,10 @@
 use rand::Rng;
 use rand::seq::SliceRandom;
 
-use crate::grid_world::entity::{TileKind};
-use crate::grid_world::world::state::World;
+use crate::grid_world::entity::TileKind;
 use crate::grid_world::layout::parsers;
-use crate::grid_world::pathfinding::{geometry, bfs};
+use crate::grid_world::pathfinding::{bfs, geometry};
+use crate::grid_world::world::state::World;
 
 //-----------------------------------------------------
 // Walkable floor cells
@@ -33,8 +33,7 @@ impl World {
 //-----------------------------------------------------
 
 impl World {
-    pub fn reposition_entities(&mut self, rng: &mut impl Rng) -> Option<()> 
-    {
+    pub fn reposition_entities(&mut self, rng: &mut impl Rng) -> Option<()> {
         const MAX_ATTEMPTS: usize = 20; // tune later
 
         let grid = parsers::layout_to_grid(&self.layout);
@@ -54,23 +53,25 @@ impl World {
         let n_needed = enemy_ids.len() + 2; // Player, Goal, (2) + Enemies
 
         for _attempt in 0..MAX_ATTEMPTS {
+            let mut chosen: Vec<_> = candidate_cells
+                .choose_multiple(rng, n_needed)
+                .copied()
+                .collect();
 
-            let mut chosen: Vec<_> = candidate_cells.choose_multiple(rng, n_needed).copied().collect();
-            
             // not enough walkable cells at all, retrying won't help
             if chosen.len() < n_needed {
-                return None; 
+                return None;
             };
-            
-            let candidate_player_cell  = chosen.pop()?;
+
+            let candidate_player_cell = chosen.pop()?;
             let candidate_goal_cell = chosen.pop()?;
-            
+
             // Check valid path  between player and goal
-            let Some(_valid_path)  = bfs::bfs_search(
-                grid.clone(), 
-                candidate_player_cell, 
-                candidate_goal_cell, 
-                vec!['#', 'T']
+            let Some(_valid_path) = bfs::bfs_search(
+                grid.clone(),
+                candidate_player_cell,
+                candidate_goal_cell,
+                vec!['#', 'T'],
             ) else {
                 continue;
             };
@@ -79,23 +80,22 @@ impl World {
             if geometry::manhattan_distance(candidate_player_cell, candidate_goal_cell)
                 >= self.config.min_player_goal_distance as i32
             {
-
                 // Update player position on entity system
                 self.ecs.set_position(player_id, candidate_player_cell);
 
                 // Update goal on tile grid
                 self.grid[candidate_goal_cell.0][candidate_goal_cell.1] = TileKind::Goal;
                 self.grid[goal_cell.0][goal_cell.1] = TileKind::Free;
-                
+
                 for enemy_id in enemy_ids {
-                    let enemy_pos = chosen.pop().expect("chosen should have exactly enemy_ids.len() cells left");
+                    let enemy_pos = chosen
+                        .pop()
+                        .expect("chosen should have exactly enemy_ids.len() cells left");
                     self.ecs.set_position(enemy_id, enemy_pos);
                 }
 
                 return Some(());
-                            
             }
-
         }
 
         None // exhausted retries

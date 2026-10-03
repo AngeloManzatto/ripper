@@ -2,7 +2,7 @@
 // Libraries
 //-----------------------------------------------------
 
-/* 
+/*
 pub mod ecs;
 pub mod entity;
 pub mod action;
@@ -14,10 +14,9 @@ pub mod render;
 pub mod environment;
 */
 
-pub mod entity;
 pub mod action;
 pub mod ecs;
-pub mod pathfinding;
+pub mod entity;
 pub mod layout;
+pub mod pathfinding;
 pub mod world;
-

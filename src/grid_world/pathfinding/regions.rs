@@ -2,8 +2,8 @@
 // Imports
 //-----------------------------------------------------
 
-use std::collections::VecDeque;
 use std::collections::HashSet;
+use std::collections::VecDeque;
 
 use crate::grid_world::pathfinding::grid;
 
@@ -11,8 +11,10 @@ use crate::grid_world::pathfinding::grid;
 // Find connected regions
 //-----------------------------------------------------
 
-pub fn find_connected_regions(grid: &Vec<Vec<char>>, avoid: &Vec<char>) -> Vec<Vec<(usize, usize)>> {
-
+pub fn find_connected_regions(
+    grid: &Vec<Vec<char>>,
+    avoid: &Vec<char>,
+) -> Vec<Vec<(usize, usize)>> {
     let mut visited: HashSet<(usize, usize)> = HashSet::new();
     let mut regions = Vec::new();
 
@@ -69,50 +71,55 @@ mod tests {
     fn test_find_connected_regions() {
         // Path find
 
-        let grid= vec![
-            vec!['.', '#', '#', '#', '#'], 
-            vec!['.', '.', '.', 'T', '#'], 
-            vec!['.', '#', '#', '.', '.'], 
-            vec!['.', '#', '#', '.', '#'],  
-            vec!['.', '.', '#', ',', '#'],];
+        let grid = vec![
+            vec!['.', '#', '#', '#', '#'],
+            vec!['.', '.', '.', 'T', '#'],
+            vec!['.', '#', '#', '.', '.'],
+            vec!['.', '#', '#', '.', '#'],
+            vec!['.', '.', '#', ',', '#'],
+        ];
 
         let avoid = vec!['#', 'T'];
 
-        let regions = find_connected_regions(
-            &grid,
-            &avoid,
-        );
+        let regions = find_connected_regions(&grid, &avoid);
 
         println!("Path found {:?}", regions);
 
         assert_eq!(regions.len(), 2);
-        assert_eq!(regions[0], vec![(0,0),(1,0),(2,0),(1,1),(3,0),(1,2),(4,0),(4,1)]);
-        assert_eq!(regions[1], vec![(2,3),(3,3),(2,4),(4,3)]);
-
+        assert_eq!(
+            regions[0],
+            vec![
+                (0, 0),
+                (1, 0),
+                (2, 0),
+                (1, 1),
+                (3, 0),
+                (1, 2),
+                (4, 0),
+                (4, 1)
+            ]
+        );
+        assert_eq!(regions[1], vec![(2, 3), (3, 3), (2, 4), (4, 3)]);
     }
 
     #[test]
     fn test_find_largest_regions() {
         // Path find
 
-        let grid= vec![
-            vec!['.', '#', '#', '#', '#'], 
-            vec!['.', '.', '.', 'T', '#'], 
-            vec!['.', '#', '#', '.', '.'], 
-            vec!['.', '#', '#', '.', '#'],  
-            vec!['.', '.', '#', ',', '#'],];
+        let grid = vec![
+            vec!['.', '#', '#', '#', '#'],
+            vec!['.', '.', '.', 'T', '#'],
+            vec!['.', '#', '#', '.', '.'],
+            vec!['.', '#', '#', '.', '#'],
+            vec!['.', '.', '#', ',', '#'],
+        ];
 
         let avoid = vec!['#', 'T'];
 
-        let regions = find_connected_regions(
-            &grid,
-            &avoid,
-        );
+        let regions = find_connected_regions(&grid, &avoid);
 
         let largest_region = get_largest_region(&regions);
 
         println!("Largest region {:?}", largest_region);
-
     }
-
 }

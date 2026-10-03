@@ -2,10 +2,8 @@
 // Libraries
 //-----------------------------------------------------
 
-fn main() {
-
-}
-/* 
+fn main() {}
+/*
 use macroquad::prelude::*;
 use std::collections::HashMap;
 
@@ -63,11 +61,11 @@ async fn main() {
 
         // Get player positions
         let player_pos = world.positions[&player_id];
-        
+
         // Get visible cells for this entity
         let visible_cells = vision::get_visible_cells(
-            &world, 
-            player_pos, 
+            &world,
+            player_pos,
             perception_range);
 
         let discovered = world.discovered.get(&player_id).cloned().unwrap_or_default();
@@ -80,7 +78,7 @@ async fn main() {
 }
 
 fn generate_world(
-    generation_config: layout::GenerationConfig, 
+    generation_config: layout::GenerationConfig,
     world_config: &world::WorldConfig
 ) -> world::World
 {

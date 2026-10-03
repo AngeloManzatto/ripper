@@ -2,9 +2,10 @@
 // Libraries
 //-----------------------------------------------------
 
-pub mod state;
 pub mod builder;
-pub mod rules;
-pub mod reposition;
-pub mod perception;
 pub mod observation;
+pub mod perception;
+pub mod render;
+pub mod reposition;
+pub mod rules;
+pub mod state;

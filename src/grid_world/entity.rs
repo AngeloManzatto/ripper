@@ -38,7 +38,6 @@ impl TileKind {
 pub enum EntityKind {
     Player,
     Enemy,
-
 }
 
 impl EntityKind {

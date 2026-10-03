@@ -15,12 +15,11 @@ use crate::grid_world::pathfinding::grid;
 //-----------------------------------------------------
 
 pub fn greedy_best_first_search(
-    grid: Vec<Vec<char>>, 
+    grid: Vec<Vec<char>>,
     start: (usize, usize),
     target: (usize, usize),
-    avoid: Vec<char>
-) -> Option<Vec<(usize, usize)>>
-{
+    avoid: Vec<char>,
+) -> Option<Vec<(usize, usize)>> {
     /*--------------------------------------------------------------------------
 
     Algorithm:
@@ -34,21 +33,22 @@ pub fn greedy_best_first_search(
         parent (for path reconstruction) the first time it is discovered, and
         push it onto the heap.
     3. If the heap empties out without ever reaching `target`, no path exists.
-    
+
     --------------------------------------------------------------------------*/
 
     let mut path_heap = BinaryHeap::new();
     path_heap.push((Reverse(geometry::manhattan_distance(start, target)), start));
 
-    let mut visited:HashSet<(usize, usize)> = HashSet::new();
+    let mut visited: HashSet<(usize, usize)> = HashSet::new();
     let mut map: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
-    let path:Vec<(usize, usize)> = Vec::new();
+    let path: Vec<(usize, usize)> = Vec::new();
 
     // # If already at the target, do nothing
-    if start == target { return Some(path); }
+    if start == target {
+        return Some(path);
+    }
 
     while let Some((_, current)) = path_heap.pop() {
-        
         // If we already visited this cell skip it
         if visited.contains(&current) {
             continue;
@@ -58,8 +58,7 @@ pub fn greedy_best_first_search(
         visited.insert(current);
 
         // If we reach the goal build result from reverse path from mapped nodes
-        if current == target { 
-
+        if current == target {
             let mut result = vec![current];
             let mut node = current;
 
@@ -73,8 +72,7 @@ pub fn greedy_best_first_search(
         }
 
         // Check neighbors
-        for (nr, nc) in geometry::neighbors(current) 
-        {
+        for (nr, nc) in geometry::neighbors(current) {
             if grid::is_blocked(&grid, nr, nc, &avoid) {
                 continue;
             }
@@ -88,12 +86,13 @@ pub fn greedy_best_first_search(
             // Only record a breadcrumb the first time we discover this cell
             map.entry(neighbor).or_insert(current);
 
-            path_heap.push((Reverse(geometry::manhattan_distance(neighbor, target)), neighbor));
+            path_heap.push((
+                Reverse(geometry::manhattan_distance(neighbor, target)),
+                neighbor,
+            ));
         }
-
     }
 
-    
     None
 }
 
@@ -109,78 +108,62 @@ mod tests {
     fn test_shortest_path() {
         // Path find
 
-        let grid= vec![
-            vec!['.', '#', '#', '#', '#'], 
-            vec!['.', '.', '.', '.', '#'], 
-            vec!['.', '#', '#', '.', '.'], 
-            vec!['.', '#', '#', '.', '#'],  
-            vec!['.', '.', '.', ',', '#'],];
+        let grid = vec![
+            vec!['.', '#', '#', '#', '#'],
+            vec!['.', '.', '.', '.', '#'],
+            vec!['.', '#', '#', '.', '.'],
+            vec!['.', '#', '#', '.', '#'],
+            vec!['.', '.', '.', ',', '#'],
+        ];
 
         let start = (0, 0);
         let target = (2, 4);
         let avoid = vec!['#', 'T'];
 
-        let path = greedy_best_first_search(
-            grid, 
-            start, 
-            target,
-            avoid
-        );
+        let path = greedy_best_first_search(grid, start, target, avoid);
 
         println!("Path found {:?}", path);
-
     }
 
     #[test]
     fn test_no_path_exists() {
         // Path find
 
-        let grid= vec![
-            vec!['#', '#', '#', '#', '#'], 
-            vec!['#', '.', '#', '.', '#'], 
-            vec!['#', '.', '#', '.', '#'], 
-            vec!['#', '#', '#', '.', '#'],  
-            vec!['#', '#', '#', '#', '#'],];
+        let grid = vec![
+            vec!['#', '#', '#', '#', '#'],
+            vec!['#', '.', '#', '.', '#'],
+            vec!['#', '.', '#', '.', '#'],
+            vec!['#', '#', '#', '.', '#'],
+            vec!['#', '#', '#', '#', '#'],
+        ];
 
         let start = (1, 1);
         let target = (3, 3);
         let avoid = vec!['#', 'T'];
 
-        let path = greedy_best_first_search(
-            grid, 
-            start, 
-            target,
-            avoid
-        );
+        let path = greedy_best_first_search(grid, start, target, avoid);
 
         println!("Path found {:?}", path);
-
     }
 
     #[test]
     fn test_avoid_hazard() {
         // Path find
 
-        let grid= vec![
-            vec!['.', '#', '#', '#', '#'], 
-            vec!['.', '.', '.', 'T', '#'], 
-            vec!['.', '#', '#', '.', '.'], 
-            vec!['.', '#', '#', '.', '#'],  
-            vec!['.', '.', '.', ',', '#'],];
+        let grid = vec![
+            vec!['.', '#', '#', '#', '#'],
+            vec!['.', '.', '.', 'T', '#'],
+            vec!['.', '#', '#', '.', '.'],
+            vec!['.', '#', '#', '.', '#'],
+            vec!['.', '.', '.', ',', '#'],
+        ];
 
         let start = (0, 0);
         let target = (2, 4);
         let avoid = vec!['#', 'T'];
 
-        let path = greedy_best_first_search(
-            grid, 
-            start, 
-            target,
-            avoid
-        );
+        let path = greedy_best_first_search(grid, start, target, avoid);
 
         println!("Path found {:?}", path);
-
     }
-
 }

@@ -19,8 +19,8 @@ pub struct GenerationConfig {
     pub wall_density: f64,
     pub num_enemies: usize,
     pub num_traps: usize,
-    pub min_player_goal_distance: usize, 
-    pub seed: Option<u64>
+    pub min_player_goal_distance: usize,
+    pub seed: Option<u64>,
 }
 
 impl Default for GenerationConfig {
@@ -32,7 +32,7 @@ impl Default for GenerationConfig {
             num_enemies: 1,
             num_traps: 0,
             min_player_goal_distance: 0,
-            seed : Some(0)
+            seed: Some(0),
         }
     }
 }
@@ -41,8 +41,7 @@ impl Default for GenerationConfig {
 // Generate a default grid
 //-----------------------------------------------------
 
-fn generate_default_grid(width:usize, height: usize) -> Vec<Vec<char>>
-{
+fn generate_default_grid(width: usize, height: usize) -> Vec<Vec<char>> {
     vec![vec!['.'; width]; height]
 }
 
@@ -50,8 +49,7 @@ fn generate_default_grid(width:usize, height: usize) -> Vec<Vec<char>>
 // Pad grid with walls
 //-----------------------------------------------------
 
-fn pad_grid_with_walls(mut grid:Vec<Vec<char>>, padding:usize) -> Vec<Vec<char>>
-{
+fn pad_grid_with_walls(mut grid: Vec<Vec<char>>, padding: usize) -> Vec<Vec<char>> {
     let height = grid.len();
     let width = grid[0].len();
 
@@ -62,11 +60,7 @@ fn pad_grid_with_walls(mut grid:Vec<Vec<char>>, padding:usize) -> Vec<Vec<char>>
 
     for row in 0..height {
         for col in 0..width {
-            if row < padding
-                || row >= height - padding
-                || col < padding
-                || col >= width - padding
-            {
+            if row < padding || row >= height - padding || col < padding || col >= width - padding {
                 grid[row][col] = '#';
             }
         }
@@ -80,10 +74,10 @@ fn pad_grid_with_walls(mut grid:Vec<Vec<char>>, padding:usize) -> Vec<Vec<char>>
 //-----------------------------------------------------
 
 fn add_random_walls_to_grid(
-    mut grid:Vec<Vec<char>>, 
-    wall_density:f64,
-    rng: &mut impl Rng) -> Vec<Vec<char>>
-{
+    mut grid: Vec<Vec<char>>,
+    wall_density: f64,
+    rng: &mut impl Rng,
+) -> Vec<Vec<char>> {
     let height = grid.len();
     let width = grid[0].len();
 
@@ -98,20 +92,18 @@ fn add_random_walls_to_grid(
     grid
 }
 
-
 //-----------------------------------------------------
 // Get empty positions
 //-----------------------------------------------------
 
-fn get_grid_empty_cells(grid: &Vec<Vec<char>>) -> Vec<(usize, usize)>
-{
-    let height  = grid.len();
+fn get_grid_empty_cells(grid: &Vec<Vec<char>>) -> Vec<(usize, usize)> {
+    let height = grid.len();
     let width = grid[0].len();
 
     // Get valid positions that are not occupied
     let mut empty_cells = Vec::new();
 
-    for row in 0..height{
+    for row in 0..height {
         for col in 0..width {
             if grid[row][col] == '.' {
                 empty_cells.push((row, col));
@@ -153,8 +145,7 @@ fn pick_player_and_goal(
 // Generate a default layout
 //-----------------------------------------------------
 
-pub fn generate_layout(config: &GenerationConfig, rng: &mut impl Rng) -> Option<String>
-{
+pub fn generate_layout(config: &GenerationConfig, rng: &mut impl Rng) -> Option<String> {
     /*--------------------------------------------------------
     Generation procedure:
 
@@ -166,7 +157,7 @@ pub fn generate_layout(config: &GenerationConfig, rng: &mut impl Rng) -> Option<
     6) Place Player and Goal on largest region
     7) Place enemies from the same region, excluding whatever cells player/goal now occupy.
     8) Serialize to String.
-    
+
     --------------------------------------------------------*/
 
     let width = config.width;
@@ -184,11 +175,9 @@ pub fn generate_layout(config: &GenerationConfig, rng: &mut impl Rng) -> Option<
     // 4) Place traps
     let empty_cells = get_grid_empty_cells(&grid);
 
-    let mut trap_positions: Vec<_> = empty_cells
-    .choose_multiple(rng, config.num_traps)
-    .collect();
+    let mut trap_positions: Vec<_> = empty_cells.choose_multiple(rng, config.num_traps).collect();
 
-    for _n in  0..config.num_traps{
+    for _n in 0..config.num_traps {
         let trap_position = trap_positions.pop().expect("Position not found");
         grid[trap_position.0][trap_position.1] = 'T';
     }
@@ -199,27 +188,24 @@ pub fn generate_layout(config: &GenerationConfig, rng: &mut impl Rng) -> Option<
     // 6) Place Player and Goal on largest region
     let largest_region = regions::get_largest_region(&regions)?;
 
-    let (player_pos, goal_pos) = pick_player_and_goal(
-        largest_region,
-        config.min_player_goal_distance,
-        rng,
-    )?;
+    let (player_pos, goal_pos) =
+        pick_player_and_goal(largest_region, config.min_player_goal_distance, rng)?;
 
     grid[player_pos.0][player_pos.1] = 'P';
     grid[goal_pos.0][goal_pos.1] = 'G';
 
     // 7) Place enemies from the same region, excluding whatever cells player/goal now occupy.
     let candidate_cells: Vec<(usize, usize)> = largest_region
-    .iter()
-    .filter(|c| **c != player_pos && **c != goal_pos)
-    .cloned()
-    .collect();
+        .iter()
+        .filter(|c| **c != player_pos && **c != goal_pos)
+        .cloned()
+        .collect();
 
     let mut enemy_positions: Vec<_> = candidate_cells
-    .choose_multiple(rng, config.num_enemies)
-    .collect();
+        .choose_multiple(rng, config.num_enemies)
+        .collect();
 
-    for _n in  0..config.num_enemies{
+    for _n in 0..config.num_enemies {
         let enemy_position = enemy_positions.pop().expect("Position not found");
         grid[enemy_position.0][enemy_position.1] = 'E';
     }
@@ -228,7 +214,6 @@ pub fn generate_layout(config: &GenerationConfig, rng: &mut impl Rng) -> Option<
     let layout_string = parsers::grid_to_layout(&grid);
 
     Some(layout_string)
-
 }
 
 //-----------------------------------------------------
@@ -253,10 +238,8 @@ mod tests {
     use rand::SeedableRng;
     use rand::rngs::StdRng;
 
-
     #[test]
     fn test_add_random_walls_to_grid_deterministic() {
-
         let mut rng = StdRng::seed_from_u64(42);
 
         let mut grid = generate_default_grid(6, 6);
@@ -267,12 +250,12 @@ mod tests {
         print_grid(&grid);
         // same seed, same density, same grid size → always the exact same output
         let expected = vec![
-            vec!['#', '#', '#', '#', '#', '#'], 
-            vec!['#', '.', '.', '#', '#', '#'], 
-            vec!['#', '.', '.', '#', '.', '#'], 
-            vec!['#', '#', '.', '#', '.', '#'], 
-            vec!['#', '.', '.', '#', '.', '#'],  
-            vec!['#', '#', '#', '#', '#', '#'], 
+            vec!['#', '#', '#', '#', '#', '#'],
+            vec!['#', '.', '.', '#', '#', '#'],
+            vec!['#', '.', '.', '#', '.', '#'],
+            vec!['#', '#', '.', '#', '.', '#'],
+            vec!['#', '.', '.', '#', '.', '#'],
+            vec!['#', '#', '#', '#', '#', '#'],
         ];
 
         assert_eq!(grid, expected);
@@ -280,7 +263,6 @@ mod tests {
 
     #[test]
     fn test_generate_default_layout() {
-
         // Default random generator
         let mut rng = StdRng::seed_from_u64(42);
 
@@ -292,13 +274,14 @@ mod tests {
 
         println!("{:?}", layout);
 
-        assert_eq!(layout, "################\n##.#....#......#\n#.......#....###\n#..............#\n##..#.E..#.....#\n#.#........#...#\n#.....#...#....#\n#.#....#.....#.#\n#..#....#P.#...#\n###.#...##....G#\n#..#.#.#.#.....#\n#..#..##.......#\n#.#.....###....#\n#......##......#\n#..#........##.#\n################");
-    
+        assert_eq!(
+            layout,
+            "################\n##.#....#......#\n#.......#....###\n#..............#\n##..#.E..#.....#\n#.#........#...#\n#.....#...#....#\n#.#....#.....#.#\n#..#....#P.#...#\n###.#...##....G#\n#..#.#.#.#.....#\n#..#..##.......#\n#.#.....###....#\n#......##......#\n#..#........##.#\n################"
+        );
     }
 
     #[test]
     fn test_generate_layout_with_traps() {
-
         // Default random generator
         let mut rng = StdRng::seed_from_u64(42);
 
@@ -311,9 +294,9 @@ mod tests {
 
         println!("{:?}", layout);
 
-        assert_eq!(layout, "################\n##.#...E#......#\n#.....T.#....###\n#..............#\n##..#....#.....#\n#.#........#...#\n#.....#...#....#\n#.#....#.....#.#\n#..#....#P.#...#\n###.#...##....G#\n#..#.#.#.#.....#\n#..T..##.......#\n#.#.....###....#\n#......##......#\n#..#........##.#\n################");
-    
+        assert_eq!(
+            layout,
+            "################\n##.#...E#......#\n#.....T.#....###\n#..............#\n##..#....#.....#\n#.#........#...#\n#.....#...#....#\n#.#....#.....#.#\n#..#....#P.#...#\n###.#...##....G#\n#..#.#.#.#.....#\n#..T..##.......#\n#.#.....###....#\n#......##......#\n#..#........##.#\n################"
+        );
     }
-
-    
 }

@@ -28,7 +28,7 @@ pub struct EntityView {
     pub kind: EntityKind,
     pub status: EntityStatus,
     pub discovered: HashSet<(usize, usize)>,
-    pub perception_range: usize
+    pub perception_range: usize,
 }
 
 //-----------------------------------------------------
@@ -36,9 +36,14 @@ pub struct EntityView {
 //-----------------------------------------------------
 
 impl Ecs {
-
     // Add a new entity
-    pub fn spawn(&mut self, id: u32, kind: EntityKind, pos: (usize, usize), perception_range: usize) {
+    pub fn spawn(
+        &mut self,
+        id: u32,
+        kind: EntityKind,
+        pos: (usize, usize),
+        perception_range: usize,
+    ) {
         self.positions.insert(id, pos);
         self.kinds.insert(id, kind);
         self.discovered.insert(id, HashSet::new());
@@ -48,13 +53,22 @@ impl Ecs {
 
     // Remove entity
     pub fn despawn(&mut self, id: u32) {
-        self.positions.remove(&id).unwrap_or_else(|| panic!("ID '{}' not found in positions", id));
-        self.kinds.remove(&id).unwrap_or_else(|| panic!("ID '{}' not found in kinds", id));
-        self.discovered.remove(&id).unwrap_or_else(|| panic!("ID '{}' not found in discovered", id));
-        self.perception_ranges.remove(&id).unwrap_or_else(|| panic!("ID '{}' not found in perception_ranges", id));
-        self.status.remove(&id).unwrap_or_else(|| panic!("ID '{}' not found in status", id));
+        self.positions
+            .remove(&id)
+            .unwrap_or_else(|| panic!("ID '{}' not found in positions", id));
+        self.kinds
+            .remove(&id)
+            .unwrap_or_else(|| panic!("ID '{}' not found in kinds", id));
+        self.discovered
+            .remove(&id)
+            .unwrap_or_else(|| panic!("ID '{}' not found in discovered", id));
+        self.perception_ranges
+            .remove(&id)
+            .unwrap_or_else(|| panic!("ID '{}' not found in perception_ranges", id));
+        self.status
+            .remove(&id)
+            .unwrap_or_else(|| panic!("ID '{}' not found in status", id));
     }
-
 }
 
 //-----------------------------------------------------
@@ -62,7 +76,6 @@ impl Ecs {
 //-----------------------------------------------------
 
 impl Ecs {
-
     // All currently-alive entity ids.
     pub fn ids(&self) -> impl Iterator<Item = u32> + '_ {
         self.positions.keys().copied()
@@ -70,36 +83,51 @@ impl Ecs {
 
     // Ids matching a given kind — e.g. all enemies, without any
     pub fn ids_of_kind(&self, kind: EntityKind) -> impl Iterator<Item = u32> + '_ {
-        self.kinds.iter().filter(move |(_, k)| **k == kind).map(|(&id, _)| id)
+        self.kinds
+            .iter()
+            .filter(move |(_, k)| **k == kind)
+            .map(|(&id, _)| id)
+    }
+
+    pub fn entities_at(&self) -> HashMap<(usize, usize), u32> {
+        self.ids().map(|id| (self.position_of(id), id)).collect()
     }
 }
 
 impl Ecs {
-
     pub fn position_of(&self, id: u32) -> (usize, usize) {
-        self.positions.get(&id).copied().unwrap_or_else(|| panic!("ID '{}' not found in position", id))
+        self.positions
+            .get(&id)
+            .copied()
+            .unwrap_or_else(|| panic!("ID '{}' not found in position", id))
     }
 
     pub fn discovered_of(&self, id: u32) -> &HashSet<(usize, usize)> {
-        self.discovered.get(&id).unwrap_or_else(|| panic!("ID '{}' not found in discovered", id))
+        self.discovered
+            .get(&id)
+            .unwrap_or_else(|| panic!("ID '{}' not found in discovered", id))
     }
 
     pub fn kind_of(&self, id: u32) -> EntityKind {
-        self.kinds.get(&id).copied().unwrap_or_else(|| panic!("ID '{}' not found in kind", id))
+        self.kinds
+            .get(&id)
+            .copied()
+            .unwrap_or_else(|| panic!("ID '{}' not found in kind", id))
     }
 
     pub fn perception_of(&self, id: u32) -> usize {
-        self.perception_ranges.get(&id).copied().unwrap_or_else(|| panic!("ID '{}' not found in perception", id))
+        self.perception_ranges
+            .get(&id)
+            .copied()
+            .unwrap_or_else(|| panic!("ID '{}' not found in perception", id))
     }
 
     pub fn status_of(&self, id: u32) -> EntityStatus {
         self.status.get(&id).copied().unwrap_or(EntityStatus::Alive)
     }
-
 }
 
 impl Ecs {
-
     // Get player ID
     pub fn player_id(&self) -> u32 {
         self.ids_of_kind(EntityKind::Player)
@@ -114,26 +142,32 @@ impl Ecs {
 }
 
 impl Ecs {
-
     // Overwrites an entity's position. The only sanctioned way to move
     pub fn set_position(&mut self, id: u32, pos: (usize, usize)) {
-        *self.positions.get_mut(&id).unwrap_or_else(|| panic!("ID '{}' not found in positions", id)) = pos;
+        *self
+            .positions
+            .get_mut(&id)
+            .unwrap_or_else(|| panic!("ID '{}' not found in positions", id)) = pos;
     }
 
     // Overwrites an entity's status (Trapped/Caught/GoalReached/...).
     pub fn set_status(&mut self, id: u32, status: EntityStatus) {
-        *self.status.get_mut(&id).unwrap_or_else(|| panic!("ID '{}' not found in status", id)) = status;
+        *self
+            .status
+            .get_mut(&id)
+            .unwrap_or_else(|| panic!("ID '{}' not found in status", id)) = status;
     }
 
     // Adds a tile to an entity's discovered set — the FOW update each tick.
     pub fn set_discovered(&mut self, id: u32, pos: (usize, usize)) {
-        self.discovered.get_mut(&id).unwrap_or_else(|| panic!("ID '{}' not found in discovered", id)).insert(pos);
+        self.discovered
+            .get_mut(&id)
+            .unwrap_or_else(|| panic!("ID '{}' not found in discovered", id))
+            .insert(pos);
     }
 }
 
-
 impl Ecs {
-
     // Return entity view
     pub fn view(&self, id: u32) -> EntityView {
         EntityView {
@@ -141,8 +175,8 @@ impl Ecs {
             position: self.position_of(id),
             kind: self.kind_of(id),
             status: self.status_of(id),
-            perception_range : self.perception_of(id),
-            discovered: self.discovered_of(id).clone()
+            perception_range: self.perception_of(id),
+            discovered: self.discovered_of(id).clone(),
         }
     }
 
@@ -153,7 +187,10 @@ impl Ecs {
 
     /// Everything about every enemy in one call.
     pub fn enemies(&self) -> Vec<EntityView> {
-        self.enemy_ids().into_iter().map(|id| self.view(id)).collect()
+        self.enemy_ids()
+            .into_iter()
+            .map(|id| self.view(id))
+            .collect()
     }
 }
 
@@ -166,12 +203,25 @@ impl Ecs {
     pub fn assert_consistent(&self) {
         let ids: std::collections::HashSet<_> = self.positions.keys().copied().collect();
         for (name, keys) in [
-            ("kinds", self.kinds.keys().copied().collect::<std::collections::HashSet<_>>()),
+            (
+                "kinds",
+                self.kinds
+                    .keys()
+                    .copied()
+                    .collect::<std::collections::HashSet<_>>(),
+            ),
             ("discovered", self.discovered.keys().copied().collect()),
-            ("perception_ranges", self.perception_ranges.keys().copied().collect()),
+            (
+                "perception_ranges",
+                self.perception_ranges.keys().copied().collect(),
+            ),
             ("status", self.status.keys().copied().collect()),
         ] {
-            assert_eq!(ids, keys, "Ecs component maps out of sync: 'positions' vs '{}'", name);
+            assert_eq!(
+                ids, keys,
+                "Ecs component maps out of sync: 'positions' vs '{}'",
+                name
+            );
         }
     }
 }
@@ -182,13 +232,18 @@ impl Ecs {
 
 impl std::fmt::Debug for Ecs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-
-        writeln!(f, "{:<6} {:<10} {:<8} {:<12} {:<10}", "id", "position", "kind", "status", "perception")?;
+        writeln!(
+            f,
+            "{:<6} {:<10} {:<8} {:<12} {:<10}",
+            "id", "position", "kind", "status", "perception"
+        )?;
 
         let mut ids: Vec<_> = self.positions.keys().copied().collect();
         ids.sort();
         for id in ids {
-            writeln!(f, "{:<6} {:<10?} {:<8?} {:<12?} {:<10?}",
+            writeln!(
+                f,
+                "{:<6} {:<10?} {:<8?} {:<12?} {:<10?}",
                 id,
                 self.positions.get(&id),
                 self.kinds.get(&id),

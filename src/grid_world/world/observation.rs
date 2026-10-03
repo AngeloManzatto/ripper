@@ -2,11 +2,10 @@
 // Imports
 //-----------------------------------------------------
 
-use std::collections::{HashMap, HashSet};
-
+use crate::grid_world::entity::EntityStatus;
 use crate::grid_world::entity::{EntityKind, TileKind};
 use crate::grid_world::world::state::World;
-use crate::grid_world::entity::{EntityStatus};
+use crate::grid_world::world::perception::PerceivedCell;
 
 //-----------------------------------------------------
 // Cell encoding
@@ -15,7 +14,7 @@ use crate::grid_world::entity::{EntityStatus};
 fn entity_kind_to_cell(kind: EntityKind) -> i32 {
     match kind {
         EntityKind::Player => 2,
-        EntityKind::Enemy  => 3,
+        EntityKind::Enemy => 3,
     }
 }
 
@@ -36,7 +35,7 @@ pub struct EntityObservation {
     pub id: u32,
     pub position: (usize, usize),
     pub grid: Vec<Vec<i32>>,
-    pub status: EntityStatus
+    pub status: EntityStatus,
 }
 
 //-----------------------------------------------------
@@ -54,9 +53,9 @@ pub struct Observation {
 //-----------------------------------------------------
 
 pub struct TimeStep {
-    pub observation : Observation,
-    pub terminated : bool,
-    pub truncated : bool,
+    pub observation: Observation,
+    pub terminated: bool,
+    pub truncated: bool,
 }
 
 impl TimeStep {
@@ -70,36 +69,30 @@ impl TimeStep {
 //-----------------------------------------------------
 
 impl World {
-    pub fn observation(&self) -> Observation 
-    {
-
-        // Build once: position -> id, for every live entity
-        let occupant_at: HashMap<(usize, usize), u32> = self.ecs.ids()
-            .map(|id| (self.ecs.position_of(id), id))
-            .collect();
+    pub fn observation(&self) -> Observation {
 
         let entities: Vec<EntityObservation> = self.ecs.ids().map(|id| {
-            let pos = self.ecs.position_of(id);
-            let perception_range = self.ecs.perception_of(id);
-            let discovered = self.ecs.discovered_of(id);
-            let visible_cells: HashSet<(usize, usize)> =
-                self.get_visible_cells(pos, perception_range).into_iter().collect();
 
-            let mut grid = vec![vec![-1i32; self.width]; self.height];
+            // Get entity perceived grid
+            let perceived = self.perceived_grid(id);
 
-            // Pass 1: terrain — every discovered cell, straight from self.grid now
-            for &(r, c) in discovered {
-                grid[r][c] = tile_kind_to_cell(self.grid[r][c]);
+            // 
+            let grid: Vec<Vec<i32>> = perceived.iter().map(|row| {
+                row.iter().map(|cell| match cell {
+                    PerceivedCell::Visible { occupant: Some(kind), .. } => entity_kind_to_cell(*kind),
+                    PerceivedCell::Visible { terrain, occupant: None } => tile_kind_to_cell(*terrain),
+                    PerceivedCell::Remembered { terrain } => tile_kind_to_cell(*terrain),
+                    PerceivedCell::Unknown => -1,
+                }).collect()
+            }).collect();
+
+            EntityObservation {
+                id,
+                position: self.ecs.position_of(id),
+                grid,
+                status: self.ecs.status_of(id),
             }
 
-            // Pass 2: movers — only currently-visible cells, using the reverse lookup
-            for &(r, c) in &visible_cells {
-                if let Some(&occ_id) = occupant_at.get(&(r, c)) {
-                    grid[r][c] = entity_kind_to_cell(self.ecs.kind_of(occ_id));
-                }
-            }
-
-            EntityObservation { id, position: pos, grid, status: self.ecs.status_of(id) }
         }).collect();
 
         Observation {

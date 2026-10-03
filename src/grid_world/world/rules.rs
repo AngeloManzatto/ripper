@@ -2,8 +2,8 @@
 // Imports
 //-----------------------------------------------------
 
-use crate::grid_world::world::state::{World};
-use crate::grid_world::entity::{TileKind};
+use crate::grid_world::entity::TileKind;
+use crate::grid_world::world::state::World;
 
 //-----------------------------------------------------
 // Acessors
@@ -15,17 +15,15 @@ impl World {
 
         for row in 0..self.height {
             for col in 0..self.width {
-
                 let tile_kind = self.grid[row][col];
 
-                if tile_kind == target{
+                if tile_kind == target {
                     positions.push((row, col));
                 }
             }
         }
 
         positions
-
     }
 }
 
@@ -82,13 +80,11 @@ impl World {
 
 impl World {
     pub fn check_goal(&self, player_id: u32) -> bool {
-        
         // Get player position
         let player_pos = self.ecs.position_of(player_id);
 
         // Check if player position is the same as goal position
         self.grid[player_pos.0][player_pos.1] == TileKind::Goal
-
     }
 }
 
@@ -98,7 +94,6 @@ impl World {
 
 impl World {
     pub fn check_trap_collision(&self, entity_id: u32) -> bool {
-
         // Get entity position
         let entity_pos = self.ecs.position_of(entity_id);
 
@@ -113,18 +108,17 @@ impl World {
 
 impl World {
     pub fn check_enemy_collision(&self, player_id: u32) -> bool {
-
         // Get player position
         let player_pos = self.ecs.position_of(player_id);
 
         let enemy_ids = self.ecs.enemy_ids();
 
-        for enemy_id in enemy_ids{
-            if player_pos == self.ecs.position_of(enemy_id){
+        for enemy_id in enemy_ids {
+            if player_pos == self.ecs.position_of(enemy_id) {
                 return true;
             }
         }
-        
+
         false
     }
 }
