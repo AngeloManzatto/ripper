@@ -1,7 +1,7 @@
 //-----------------------------------------------------
 // Libraries
 //-----------------------------------------------------
-
+/*
 use macroquad::prelude::*;
 
 fn generate_world(
@@ -16,6 +16,7 @@ fn generate_world(
     println!("{}", world.render_world());
     world
 }
+    */
 
 fn main() {}
 /*

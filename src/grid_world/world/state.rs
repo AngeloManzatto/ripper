@@ -55,7 +55,12 @@ pub struct World {
 
 impl World {
     pub fn reset(&mut self) -> TimeStep {
+
+        // Rebuild world from layout
         *self = World::from_layout(&self.layout, &self.config);
+
+        // Update entities views
+        self.update_all_discovered();
 
         return TimeStep {
             observation: self.observation(),
@@ -64,9 +69,16 @@ impl World {
         };
     }
 
-    pub fn reset_with_reposition(&mut self, rng: &mut impl Rng) -> TimeStep {
+    pub fn reset_with_reposition(&mut self, rng: &mut impl Rng) -> TimeStep 
+    {
+        // Reset world
         self.reset();
+
+        // Reposition entities
         self.reposition_entities(rng);
+
+        // Update entities views
+        self.update_all_discovered();
 
         return TimeStep {
             observation: self.observation(),
@@ -372,4 +384,18 @@ mod tests {
 
         assert!(result.is_some());
     }
+
+    #[test]
+    fn reset_remembers_initial_view() {
+        let mut world = World::from_layout(default_layout(), &WorldConfig::default());
+        world.reset();
+        let pid = world.ecs.player_id();
+        let pos = world.ecs.position_of(pid);
+        let range = world.ecs.perception_of(pid);
+        let discovered = world.ecs.discovered_of(pid);
+        for cell in world.get_visible_cells(pos, range) {
+            assert!(discovered.contains(&cell));
+        }
+    }
+    
 }

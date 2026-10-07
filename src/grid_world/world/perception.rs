@@ -147,6 +147,16 @@ pub enum PerceivedCell {
 }
 
 impl World {
+
+    pub fn update_all_discovered(&mut self) {
+        let ids: Vec<u32> = self.ecs.ids().collect();   // collect first: avoids borrowing self.ecs while mutating
+        for id in ids {
+            let pos = self.ecs.position_of(id);
+            let range = self.ecs.perception_of(id);
+            self.update_discovered(id, pos, range);
+        }
+    }
+
     pub fn perceived_grid(&self, id: u32) -> Vec<Vec<PerceivedCell>> 
     {
         // Get entity position
