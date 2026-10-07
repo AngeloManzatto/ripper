@@ -5,7 +5,7 @@
 use colored::*;
 
 use crate::grid_world::entity::{EntityKind, TileKind};
-use crate::grid_world::world::state::{World,WorldConfig};
+use crate::grid_world::world::state::{World};
 use crate::grid_world::world::perception::PerceivedCell;
 
 //-----------------------------------------------------
@@ -120,6 +120,8 @@ fn render_entity_view_visual() {
     use colored::control::set_override;
     use std::collections::HashMap;
     use crate::grid_world::action::Action;
+    use crate::grid_world::world::state::WorldConfig;
+
     set_override(true);
 
     let mut config = WorldConfig::default();

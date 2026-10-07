@@ -2,8 +2,8 @@
 // Libraries
 //-----------------------------------------------------
 
-pub mod bfs;
-pub mod geometry;
-pub mod greedy;
-pub mod grid;
-pub mod regions;
+pub mod config;
+pub mod action;
+pub mod observation;
+pub mod world;
+pub mod layout;

@@ -1,5 +1,5 @@
 """
-Created on Thu Sep 10 13:06:16 2026
+Created on Mon Oct  5 09:35:02 2026
 
 @author: Angelo Antonio Manzatto
 """
@@ -8,144 +8,107 @@ Created on Thu Sep 10 13:06:16 2026
 # libraries
 ###############################################################################
 
-from collections import Counter
+"""
+Evaluation: play many episodes of one agent on seeded layouts and summarise
+the outcomes.
 
-from ripper import Action
+    evaluate(agent, n_episodes, seed)
+        episode i uses layout seed (seed + i) and world seed (seed + i)
+        one agent instance plays every episode (reset() between episodes,
+        its rng is NOT reseeded), so the same agent seed + the same `seed`
+        reproduces the exact same evaluation.
 
-from agents.observation import get_one_hot_grid_for_entity, get_position_for_entity, get_legal_action_mask, TRAIL_CHANNEL
-from agents.trail_tracker import TrailTracker
-
-###############################################################################
-# Globals
-###############################################################################
-
-ACTIONS = [Action.Up, Action.Down, Action.Left, Action.Right]
-
-###############################################################################
-# Evaluate Match
-###############################################################################
-
-def evaluate_match(agents, agent_ids, world, episodes, verbose=False):
-    
-    # Outcomes for each agent. Palyer and Enemy are decided differently
-    outcomes = {agent_id: [] for agent_id in agent_ids}
-    
-    for agent, agent_id in zip(agents, agent_ids):
-        
-        agent.set_eval_mode()
-    
-    try:
-        for ep in range(episodes):
-            world.reset(reposition=True)
-            observation = world.observation()
-            done = False
-            ticks = 0
-            
-            # Fresh trail tracker per agent this episode, seeded with starting position
-            grid_shape = get_one_hot_grid_for_entity(observation, world.get_player_id()).shape[1:]
-            trail_trackers = {
-                agent_id: TrailTracker(grid_shape=grid_shape, maxlen=4)
-                for agent_id in agent_ids
-            }
- 
-            while not done:
-                
-                actions = {}
-                
-                for agent, agent_id in zip(agents, agent_ids):
-                    
-                    # Get current state for agent
-                    state = get_one_hot_grid_for_entity(observation, agent_id)
-                    state[TRAIL_CHANNEL] = trail_trackers[agent_id].get_grid()
-                    
-                    # Get mask for legal actions
-                    position = get_position_for_entity(observation, agent_id)
-                    legal_mask = get_legal_action_mask(state, position)
-                    
-                    # Play an action given current env state
-                    action_idx = agent.act(state, legal_mask)
-                                           
-                    # Regist action for agent
-                    actions[agent_id] = ACTIONS[action_idx]
-                    
-                # Act on env
-                step_result = world.step(actions)
-                
-                # Get current env result
-                done, reason = step_result.done, step_result.reason
-                
-                # Update observation current state
-                observation = world.observation()
-                
-                # Record the move each (still-present) agent just made
-                next_ids = {entity.id for entity in observation.entities}
-                for agent_id in agent_ids:
-                    if agent_id in next_ids:
-                        trail_trackers[agent_id].update(get_position_for_entity(observation, agent_id))
-                
-                # Update step count
-                ticks += 1
-                
-            # Store outcomes
-            for agent_id in agent_ids:
-                outcomes[agent_id].append(str(reason))
-                
-            if verbose:
-                print(f"    [eval] episode {ep+1}/{episodes} | ticks={ticks} | reason={reason}")
-    finally:
-        for agent in agents:
-            agent.set_train_mode()
-        
-    player_id = world.get_player_id()
-    results = {}
-    for agent_id in agent_ids:
-        is_player = agent_id == player_id
-        win_reason = "EndReason.GoalReached" if is_player else "EndReason.Caught"
-        breakdown = Counter(outcomes[agent_id])
-
-        results[agent_id] = {
-            "win_rate": breakdown.get(win_reason, 0) / episodes,
-            "timeout_rate": breakdown.get("EndReason.Timeout", 0) / episodes,
-            "breakdown": dict(breakdown),
-        }
-        
-    if verbose:
-        print(f"    [eval] done | {results}")
-            
-    return results
+To measure noise, vary the agent seed and keep `seed` fixed (same layouts),
+or the reverse.
+"""
 
 ###############################################################################
-# Evaluate MC (Minimum Criterion POET)
+# Libraries
 ###############################################################################
 
-def passes_minimal_criterion(results, win_low=0.2, win_high=0.7, timeout_cap=0.3):
+from dataclasses import dataclass
+
+from agents.base_agent import BaseAgent
+from agents.runner import EpisodeResult, run_episode
+from engine import GenerationConfig, World, WorldConfig, generate_valid_layout
+
+###############################################################################
+# Summary
+###############################################################################
+
+OUTCOMES = ("GoalReached", "Trapped", "Caught", "Timeout")
+
+@dataclass(frozen=True)
+class EvalSummary:
+    n_episodes: int
+    outcome_counts: dict[str, int]
+    mean_steps: float
+    results: list[EpisodeResult]
+
+    def rate(self, outcome: str) -> float:
+        """Fraction of episodes that ended with `outcome`."""
+        return self.outcome_counts.get(outcome, 0) / self.n_episodes
+
+    def __str__(self) -> str:
+        parts = [f"{o}: {self.rate(o):.1%}" for o in self.outcome_counts]
+        return (
+            f"{self.n_episodes} episodes | "
+            + " | ".join(parts)
+            + f" | mean steps: {self.mean_steps:.1f}"
+        )
+
+###############################################################################
+# Evaluate
+###############################################################################
+
+def evaluate(
+    agent: BaseAgent,
+    n_episodes: int = 100,
+    seed: int = 0,
+    generation_kwargs: dict | None = None,
+    world_config: WorldConfig | None = None,
+) -> EvalSummary:
     """
-    Decide whether a layout's current evaluation is a valid stepping stone:
-    neither side dominates, and the episodes are actually resolving.
+    Play `n_episodes` episodes with `agent` controlling the player.
 
-    Parameters
-    ----------
-    results : dict
-        Shape returned by evaluate_match:
-        {agent_id: {"win_rate": float, "timeout_rate": float, "breakdown": dict}, ...}
-    win_low, win_high : float
-        Every agent's win_rate must fall within [win_low, win_high] (inclusive).
-    timeout_cap : float
-        Reject if timeout_rate exceeds this (checked once -- it's the same
-        value across every agent in `results`, since it comes from the same
-        shared set of episode outcomes).
-
-    Returns
-    -------
-    bool
+    generation_kwargs: forwarded to GenerationConfig (width, height,
+                       wall_density, ...). The seed is set per episode.
+    world_config:      forwarded to World (max_tick, perception ranges, ...).
     """
- 
-    for value in results.values():
-        
-        if not win_low <= value["win_rate"] <= win_high:
-            return False
-        
-        if value["timeout_rate"] > timeout_cap:
-            return False
 
-    return True
+    if n_episodes < 1:
+        raise ValueError(f"n_episodes must be >= 1, got {n_episodes}")
+
+    generation_kwargs = generation_kwargs or {}
+
+    results: list[EpisodeResult] = []
+
+    for i in range(n_episodes):
+        episode_seed = seed + i
+
+        layout = generate_valid_layout(
+            GenerationConfig(**generation_kwargs, seed=episode_seed)
+        )
+        if layout is None:
+            raise RuntimeError(
+                f"Could not generate a valid layout for seed {episode_seed}; "
+                "loosen the generation settings"
+            )
+
+        world = World(layout, world_config, episode_seed)
+
+        # The player id can differ between layouts
+        player_id = world.reset().observation.player_id
+
+        results.append(run_episode(world, {player_id: agent}))
+
+    outcome_counts = {o: 0 for o in OUTCOMES}
+    for r in results:
+        outcome_counts[r.outcome] = outcome_counts.get(r.outcome, 0) + 1
+
+    return EvalSummary(
+        n_episodes=n_episodes,
+        outcome_counts=outcome_counts,
+        mean_steps=sum(r.steps for r in results) / n_episodes,
+        results=results,
+    )

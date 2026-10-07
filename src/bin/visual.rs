@@ -2,6 +2,21 @@
 // Libraries
 //-----------------------------------------------------
 
+use macroquad::prelude::*;
+
+fn generate_world(
+    generation_config: &GenerationConfig,
+    world_config: &WorldConfig,
+    rng: &mut impl Rng,
+) -> World {
+    
+    let layout = generate::generate_valid_layout(generation_config, rng)
+        .expect("layout generation should succeed");
+    let world = World::from_layout(&layout, world_config);
+    println!("{}", world.render_world());
+    world
+}
+
 fn main() {}
 /*
 use macroquad::prelude::*;

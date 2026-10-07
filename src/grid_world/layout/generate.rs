@@ -5,7 +5,7 @@
 use rand::Rng;
 use rand::seq::SliceRandom;
 
-use crate::grid_world::layout::parsers;
+use crate::grid_world::layout::{parsers, validate};
 use crate::grid_world::pathfinding::regions;
 
 //-----------------------------------------------------
@@ -217,14 +217,23 @@ pub fn generate_layout(config: &GenerationConfig, rng: &mut impl Rng) -> Option<
 }
 
 //-----------------------------------------------------
-// Debug print
+// Generate valid layout
 //-----------------------------------------------------
 
-fn print_grid(grid: &Vec<Vec<char>>) {
-    for row in grid {
-        let line: String = row.iter().collect();
-        println!("{}", line);
+pub fn generate_valid_layout(config: &GenerationConfig, rng: &mut impl Rng) -> Option<String> {
+    const MAX_ATTEMPTS: usize = 20;
+
+    for _attempt in 0..MAX_ATTEMPTS {
+        if let Some(layout) = generate_layout(config, rng) {
+            if validate::is_layout_reachable(&layout)
+                && validate::is_player_far_from_goal(&layout, config.min_player_goal_distance)
+            {
+                return Some(layout);
+            }
+        }
     }
+
+    None // exhausted retries
 }
 
 //-----------------------------------------------------
@@ -238,6 +247,14 @@ mod tests {
     use rand::SeedableRng;
     use rand::rngs::StdRng;
 
+    fn print_grid(grid: &Vec<Vec<char>>) {
+        for row in grid {
+            let line: String = row.iter().collect();
+            println!("{}", line);
+        }
+    }
+
+
     #[test]
     fn test_add_random_walls_to_grid_deterministic() {
         let mut rng = StdRng::seed_from_u64(42);
@@ -248,6 +265,7 @@ mod tests {
 
         // Print grid
         print_grid(&grid);
+
         // same seed, same density, same grid size → always the exact same output
         let expected = vec![
             vec!['#', '#', '#', '#', '#', '#'],
@@ -296,7 +314,7 @@ mod tests {
 
         assert_eq!(
             layout,
-            "################\n##.#...E#......#\n#.....T.#....###\n#..............#\n##..#....#.....#\n#.#........#...#\n#.....#...#....#\n#.#....#.....#.#\n#..#....#P.#...#\n###.#...##....G#\n#..#.#.#.#.....#\n#..T..##.......#\n#.#.....###....#\n#......##......#\n#..#........##.#\n################"
+            "################\n##.#...E#......#\n#....T..#....###\n#..............#\n##..#....#.....#\n#.#........#...#\n#.....#...#....#\n#.#....#.....#.#\n#..#....#P.#...#\n###.#...##....G#\n#..#.#.#.#..T..#\n#..#..##.......#\n#.#.....###....#\n#......##......#\n#..#........##.#\n################"
         );
     }
 }

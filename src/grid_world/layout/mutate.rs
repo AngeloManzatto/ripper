@@ -8,7 +8,7 @@ use rand::seq::SliceRandom;
 
 use std::collections::HashMap;
 
-use crate::grid_world::layout::parsers;
+use crate::grid_world::layout::{parsers, validate};
 
 //-----------------------------------------------------
 // Mutation Generator Configuration
@@ -322,6 +322,26 @@ pub fn mutate_layout(layout: &str, config: &MutationConfig, rng: &mut impl Rng) 
     let layout_string = parsers::grid_to_layout(&grid);
 
     Some(layout_string)
+}
+
+//-----------------------------------------------------
+// Muatata valid layout
+//-----------------------------------------------------
+
+pub fn mutate_valid_layout(layout: &str, config: &MutationConfig, rng: &mut impl Rng) -> Option<String> {
+    const MAX_ATTEMPTS: usize = 20;
+
+    for _attempt in 0..MAX_ATTEMPTS {
+        if let Some(mutated) = mutate_layout(layout, config, rng) {
+            if validate::is_layout_reachable(&mutated)
+                && validate::is_player_far_from_goal(&mutated, config.min_player_goal_distance)
+            {
+                return Some(mutated);
+            }
+        }
+    }
+
+    None // exhausted retries
 }
 
 //-----------------------------------------------------
