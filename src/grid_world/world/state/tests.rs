@@ -3,7 +3,7 @@
 //-----------------------------------------------------
 
 use crate::grid_world::action::Action;
-use crate::grid_world::world::state::{World, WorldConfig};
+use crate::grid_world::world::state::{World, WorldConfig, TimeStep};
 use crate::grid_world::entity::{TileKind};
 
 //-----------------------------------------------------
@@ -39,6 +39,39 @@ mod tests {
          #..G#\n\
          #####"
     }
+
+    // ---------------------------------------------------------------
+    // Helpers for the enemy-catch tests
+    // ---------------------------------------------------------------
+
+    fn layout_two_enemies_around_player() -> &'static str {
+        "#####\n\
+         #EPE#\n\
+         #...#\n\
+         #..G#\n\
+         #####"
+    }
+
+    fn layout_catcher_and_bystander() -> &'static str {
+        "######\n\
+         #PE.E#\n\
+         #....#\n\
+         #...G#\n\
+         ######"
+    }
+
+    /// Asserts the status of one entity in the observation returned by a step.
+    fn assert_status_in_observation(step: &TimeStep, id: u32, expected: EntityStatus) {
+        let entity = step
+            .observation
+            .entities
+            .iter()
+            .find(|e| e.id == id)
+            .expect("entity must be present in the final observation");
+
+        assert_eq!(entity.status, expected, "status of entity {}", id);
+    }
+
 
     #[test]
     fn from_layout_builds_correct_dimensions_and_positions() {
@@ -148,25 +181,6 @@ mod tests {
         assert!(world.done);
         assert!(step.truncated);
         assert!(!step.terminated);
-    }
-
-    #[test]
-    fn step_enemy_collision_sets_done_and_caught() {
-        let mut world = World::from_layout(layout_with_enemy(), &WorldConfig::default());
-        let player_id = world.ecs.player_id();
-        let enemy_id = world.ecs.enemy_ids()[0];
-        let mut rng = rand::thread_rng();
-
-        // Player (1,1) -> (1,2); Enemy (1,3) -> (1,2): collide
-        let mut actions = HashMap::new();
-        actions.insert(player_id, Action::Right);
-        actions.insert(enemy_id, Action::Left);
-
-        let step = world.step(actions, &mut rng);
-
-        assert!(world.done);
-        assert!(step.terminated);
-        assert_eq!(world.ecs.status_of(player_id), EntityStatus::Caught);
     }
 
     #[test]
@@ -307,6 +321,103 @@ mod tests {
 
         assert_eq!(enemy_obs.status, EntityStatus::Trapped, "Enemy Status: {:?}", enemy_obs.status);
       
+    }
+
+    // ---------------------------------------------------------------
+    // The catching enemy gets GoalReached
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn step_enemy_collision_sets_done_and_caught() {
+        let mut world = World::from_layout(layout_with_enemy(), &WorldConfig::default());
+        world.reset();
+        let player_id = world.ecs.player_id();
+        let enemy_id = world.ecs.enemy_ids()[0];
+        let mut rng = rand::thread_rng();
+
+        // Player (1,1) -> (1,2); Enemy (1,3) -> (1,2): collide
+        let mut actions = HashMap::new();
+        actions.insert(player_id, Action::Right);
+        actions.insert(enemy_id, Action::Left);
+
+        let step = world.step(actions, &mut rng);
+
+        assert!(world.done);
+        assert!(step.terminated);
+        assert_eq!(world.ecs.status_of(player_id), EntityStatus::Caught);
+
+        // The enemy reached its own goal: the player.
+        assert_status_in_observation(&step, enemy_id, EntityStatus::GoalReached);
+        assert_status_in_observation(&step, player_id, EntityStatus::Caught);
+    }
+
+    // ---------------------------------------------------------------
+    // Two enemies reach the player's cell in the same step -> both succeed
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn step_two_enemies_catch_player_in_same_step() {
+        let mut world = World::from_layout(layout_two_enemies_around_player(), &WorldConfig::default());
+        world.reset();
+        let player_id = world.ecs.player_id();
+        let enemy_ids = world.ecs.enemy_ids();
+        assert_eq!(enemy_ids.len(), 2);
+        let mut rng = rand::thread_rng();
+
+        let player_col = world.ecs.position_of(player_id).1;
+
+        // Player pushes against the top wall and stays at (1,2).
+        // Each enemy walks toward the player's column.
+        let mut actions = HashMap::new();
+        actions.insert(player_id, Action::Up);
+        for &enemy_id in &enemy_ids {
+            let enemy_col = world.ecs.position_of(enemy_id).1;
+            let action = if enemy_col < player_col { Action::Right } else { Action::Left };
+            actions.insert(enemy_id, action);
+        }
+
+        let step = world.step(actions, &mut rng);
+
+        assert!(step.terminated);
+        assert_eq!(world.ecs.status_of(player_id), EntityStatus::Caught);
+        for &enemy_id in &enemy_ids {
+            assert_status_in_observation(&step, enemy_id, EntityStatus::GoalReached);
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Only the enemy that reaches the player succeeds; the other stays Alive
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn step_only_the_catching_enemy_gets_goal_reached() {
+        let mut world = World::from_layout(layout_catcher_and_bystander(), &WorldConfig::default());
+        world.reset();
+        let player_id = world.ecs.player_id();
+        let enemy_ids = world.ecs.enemy_ids();
+        assert_eq!(enemy_ids.len(), 2);
+        let mut rng = rand::thread_rng();
+
+        // Enemy next to the player at (1,2) is the catcher; the other sits at (1,4).
+        let catcher_id = *enemy_ids
+            .iter()
+            .find(|&&id| world.ecs.position_of(id) == (1, 2))
+            .expect("one enemy starts at (1,2)");
+        let bystander_id = *enemy_ids.iter().find(|&&id| id != catcher_id).unwrap();
+
+        // Player stays at (1,1) (wall above). Catcher steps Left onto the player.
+        // Bystander pushes against the wall above and stays at (1,4).
+        let mut actions = HashMap::new();
+        actions.insert(player_id, Action::Up);
+        actions.insert(catcher_id, Action::Left);
+        actions.insert(bystander_id, Action::Up);
+
+        let step = world.step(actions, &mut rng);
+
+        assert!(step.terminated);
+        assert_eq!(world.ecs.status_of(player_id), EntityStatus::Caught);
+        assert_status_in_observation(&step, catcher_id, EntityStatus::GoalReached);
+        assert_status_in_observation(&step, bystander_id, EntityStatus::Alive);
     }
 
 }

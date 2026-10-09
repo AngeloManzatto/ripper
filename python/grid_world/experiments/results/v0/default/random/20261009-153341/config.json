@@ -1,0 +1,23 @@
+{
+  "suite": "v0",
+  "task": {
+    "name": "default",
+    "generation_kwargs": {},
+    "world_kwargs": {}
+  },
+  "agent": {
+    "name": "random",
+    "params": {}
+  },
+  "agent_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "n_episodes": 200,
+  "eval_seed": 10000,
+  "code_version": null,
+  "created": "2026-10-09T15:33:41"
+}

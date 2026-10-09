@@ -10,21 +10,17 @@ Created on Wed Oct  7 09:11:36 2026
 
 import numpy as np
 
+from core.actions import DIRECTIONS, DIRECTION_NAMES
+
 ###############################################################################
 # Globals
 ###############################################################################
 
 UNKNOWN, FREE, WALL, PLAYER, ENEMY, TRAP, GOAL = -1, 0, 1, 2, 3, 4, 5
 
-DIRECTIONS = [(-1, 0), (1, 0), (0, -1), (0, 1)] # Up, Down, Left, Right
-
-DIRECTION_NAMES = ["up", "down", "left", "right"]          # same order as DIRECTIONS
-
 NEIGHBOR_SYMBOLS = {"wall": WALL, "trap": TRAP, "hostile": None}   # hostile resolved per observer
 
 TARGETS = {"goal": GOAL, "hostile": None, "trap": TRAP}
-
-TARGETS = {"goal": GOAL, "enemy": ENEMY, "trap": TRAP}
 
 FEATURE_NAMES = (
     [f"{d}_{s}" for d in DIRECTION_NAMES for s in NEIGHBOR_SYMBOLS]          # 12

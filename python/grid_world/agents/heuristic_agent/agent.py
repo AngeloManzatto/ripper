@@ -1,9 +1,7 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Created on Thu Oct  8 13:03:45 2026
 
-@author: root
+@author: Angelo Antonio Manzatto
 """
 
 """
@@ -29,16 +27,9 @@ Written for the PLAYER (goal-seeking); an enemy observer would need its own rule
 import numpy as np
 
 from agents.base_agent import BaseAgent
-from agents.random_agent import ACTIONS
 from core.features import DIRECTION_NAMES, FEATURE_NAMES, features
+from core.actions import ACTIONS, OPPOSITE
 from engine import Action, EntityObservation
-
-###############################################################################
-# Globals
-###############################################################################
-
-# Indices follow ACTIONS / DIRECTION_NAMES: 0 up, 1 down, 2 left, 3 right
-OPPOSITE = {0: 1, 1: 0, 2: 3, 3: 2}
 
 ###############################################################################
 # Heuristic Agent

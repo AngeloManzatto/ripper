@@ -107,7 +107,10 @@ impl World {
 //-----------------------------------------------------
 
 impl World {
-    pub fn check_enemy_collision(&self, player_id: u32) -> bool {
+    pub fn enemies_catching_player(&self, player_id: u32) -> Vec<u32>
+    {
+        let mut success_enemy_ids = Vec::new();
+
         // Get player position
         let player_pos = self.ecs.position_of(player_id);
 
@@ -120,10 +123,10 @@ impl World {
             }
 
             if player_pos == self.ecs.position_of(enemy_id) {
-                return true;
+                success_enemy_ids.push(enemy_id);
             }
         }
 
-        false
+        success_enemy_ids
     }
 }

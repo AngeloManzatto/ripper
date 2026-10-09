@@ -24,3 +24,8 @@ logs
 .vscode/
 .idea/
 *dev*.sh
+
+# =========================
+# Results from running 
+# =========================
+/results

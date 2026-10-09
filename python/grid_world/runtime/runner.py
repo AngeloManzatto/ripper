@@ -76,25 +76,32 @@ def run_episode(
     while not ts.done():
 
         # Only entities still alive in the world get to act
-        actions = {
-            eid: agent.act(entities[eid])
-            for eid, agent in agents.items()
-            if eid in entities
-        }
+        actions = {}
+        
+        for entity_id, agent in agents.items():
+            
+            entity = entities.get(entity_id)       # None when the entity is gone from the world
+            if entity is not None and entity.status == "Alive":
+                actions[entity_id] = agent.act(entity)
 
         ts = world.step(actions)
         next_obs = ts.observation
         
-        
         next_entities = {e.id: e for e in next_obs.entities}
 
-        # An entity despawned by this step (e.g. enemy on a trap) has no
-        # next observation, so it gets no on_transition for its last step.
-        for eid, action in actions.items():
+        # An entity that died this step is still in next_entities, so it gets its final on_transition (terminated=True). 
+        # Later steps it is gone.
+        for entity_id, action in actions.items():
             
-            if eid in next_entities:
-                agents[eid].on_transition(
-                    entities[eid], action, next_entities[eid], ts.terminated, ts.truncated,
+            next_entity = next_entities[entity_id]
+            
+            if entity_id in next_entities:
+                
+                status = next_entity.status
+                terminated = ts.terminated or status != "Alive"
+                
+                agents[entity_id].on_transition(
+                    entities[entity_id], action, next_entity, terminated, ts.truncated,
                 )
 
         entities = next_entities

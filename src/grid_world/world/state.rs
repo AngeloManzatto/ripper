@@ -87,16 +87,6 @@ impl World {
         };
     }
 
-    pub fn remove_dead(&mut self)
-    {
-        for enemy_id in self.ecs.enemy_ids(){
-
-            if self.ecs.status_of(enemy_id) != EntityStatus::Alive {
-                self.ecs.despawn(enemy_id);
-            }
-        }
-    }
-
 }
 
 //-----------------------------------------------------
@@ -104,6 +94,7 @@ impl World {
 //-----------------------------------------------------
 
 impl World {
+
     pub fn step(&mut self, actions: HashMap<u32, Action>, rng: &mut impl Rng) -> TimeStep {
         // Game Over
         if self.done {
@@ -186,10 +177,16 @@ impl World {
             self.ecs.set_status(player_id, EntityStatus::GoalReached);
         }
 
-        if self.check_enemy_collision(player_id) {
+        let success_enemy_ids = self.enemies_catching_player(player_id);
+
+        if !success_enemy_ids.is_empty() {
             terminated = true;
             self.done = true;
             self.ecs.set_status(player_id, EntityStatus::Caught);
+
+            for enemy_id in success_enemy_ids {
+                self.ecs.set_status(enemy_id, EntityStatus::GoalReached);
+            }
         }
 
         // 5. FOW update (all entities still in the ECS, including ones that just died).
@@ -210,6 +207,17 @@ impl World {
             truncated: false,
         }
     }
+
+    pub fn remove_dead(&mut self)
+    {
+        for enemy_id in self.ecs.enemy_ids(){
+
+            if self.ecs.status_of(enemy_id) != EntityStatus::Alive {
+                self.ecs.despawn(enemy_id);
+            }
+        }
+    }
+
 }
 
 #[cfg(test)]
