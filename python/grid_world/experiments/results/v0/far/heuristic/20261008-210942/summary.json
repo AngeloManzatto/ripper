@@ -1,0 +1,78 @@
+{
+  "per_seed": [
+    {
+      "agent_seed": 0,
+      "rates": {
+        "GoalReached": 0.74,
+        "Trapped": 0.0,
+        "Caught": 0.115,
+        "Timeout": 0.145
+      },
+      "mean_steps": 38.275
+    },
+    {
+      "agent_seed": 1,
+      "rates": {
+        "GoalReached": 0.76,
+        "Trapped": 0.0,
+        "Caught": 0.105,
+        "Timeout": 0.135
+      },
+      "mean_steps": 37.21
+    },
+    {
+      "agent_seed": 2,
+      "rates": {
+        "GoalReached": 0.79,
+        "Trapped": 0.0,
+        "Caught": 0.08,
+        "Timeout": 0.13
+      },
+      "mean_steps": 37.67
+    },
+    {
+      "agent_seed": 3,
+      "rates": {
+        "GoalReached": 0.765,
+        "Trapped": 0.0,
+        "Caught": 0.085,
+        "Timeout": 0.15
+      },
+      "mean_steps": 38.62
+    },
+    {
+      "agent_seed": 4,
+      "rates": {
+        "GoalReached": 0.76,
+        "Trapped": 0.0,
+        "Caught": 0.085,
+        "Timeout": 0.155
+      },
+      "mean_steps": 37.2
+    }
+  ],
+  "aggregate": {
+    "rates": {
+      "GoalReached": {
+        "mean": 0.7630000000000001,
+        "std": 0.017888543819998336
+      },
+      "Trapped": {
+        "mean": 0.0,
+        "std": 0.0
+      },
+      "Caught": {
+        "mean": 0.094,
+        "std": 0.0151657508881031
+      },
+      "Timeout": {
+        "mean": 0.14300000000000002,
+        "std": 0.010368220676663856
+      }
+    },
+    "mean_steps": {
+      "mean": 37.795,
+      "std": 0.6369654621720061
+    }
+  }
+}

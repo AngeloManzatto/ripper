@@ -8,23 +8,13 @@ Created on Sun Oct  4 21:47:15 2026
 # libraries
 ###############################################################################
 
-from dataclasses import dataclass
 from typing import Protocol
 
-from engine import Action, Observation
+from core.transition import Transition
 
 ###############################################################################
 # Transition
 ###############################################################################
-
-@dataclass(frozen=True)
-class Transition:
-    entity_id: int           # whose reward this is
-    obs: Observation         # full observation before the action (all entities)
-    action: Action           # this entity's action
-    next_obs: Observation    # full observation after the step
-    terminated: bool
-    truncated: bool
 
 ###############################################################################
 # Reward Function

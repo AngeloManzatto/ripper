@@ -24,8 +24,24 @@ layout = (
     "##########"
 )
 
-config = ripper.WorldConfig(max_tick=50, player_perception_range=3)
-world = ripper.World(layout, config=config, seed=42)
+###############################################################################
+# Config
+###############################################################################
+
+config = ripper.WorldConfig(
+    max_tick=50, 
+    player_perception_range=3
+    )
+
+###############################################################################
+# World
+###############################################################################
+
+world = ripper.World(
+    layout,
+    config=config, 
+    seed=42
+)
 
 print(f"width={world.width} height={world.height} tick={world.tick} done={world.done}")
 print(world.render_world())

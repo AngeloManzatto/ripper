@@ -25,7 +25,6 @@ class EpisodeResult:
     outcome: "GoalReached" | "Trapped" | "Caught" | "Timeout"
     steps:   number of world steps played
     """
-
     outcome: str
     steps: int
     terminated: bool
@@ -34,7 +33,6 @@ class EpisodeResult:
 ###############################################################################
 # Run episode
 ###############################################################################
-
 
 def run_episode(
     world: World,
@@ -86,15 +84,17 @@ def run_episode(
 
         ts = world.step(actions)
         next_obs = ts.observation
+        
+        
         next_entities = {e.id: e for e in next_obs.entities}
 
         # An entity despawned by this step (e.g. enemy on a trap) has no
         # next observation, so it gets no on_transition for its last step.
         for eid, action in actions.items():
+            
             if eid in next_entities:
                 agents[eid].on_transition(
-                    entities[eid], action, next_entities[eid],
-                    ts.terminated, ts.truncated,
+                    entities[eid], action, next_entities[eid], ts.terminated, ts.truncated,
                 )
 
         entities = next_entities

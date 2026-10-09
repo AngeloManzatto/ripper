@@ -2,7 +2,7 @@
 // Imports
 //-----------------------------------------------------
 
-use crate::grid_world::entity::TileKind;
+use crate::grid_world::entity::{EntityStatus, TileKind};
 use crate::grid_world::world::state::World;
 
 //-----------------------------------------------------
@@ -114,6 +114,11 @@ impl World {
         let enemy_ids = self.ecs.enemy_ids();
 
         for enemy_id in enemy_ids {
+
+            if self.ecs.status_of(enemy_id) != EntityStatus::Alive {
+                continue;
+            }
+
             if player_pos == self.ecs.position_of(enemy_id) {
                 return true;
             }

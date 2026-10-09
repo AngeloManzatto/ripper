@@ -29,7 +29,7 @@ or the reverse.
 from dataclasses import dataclass
 
 from agents.base_agent import BaseAgent
-from agents.runner import EpisodeResult, run_episode
+from runtime.runner import EpisodeResult, run_episode
 from engine import GenerationConfig, World, WorldConfig, generate_valid_layout
 
 ###############################################################################

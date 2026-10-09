@@ -33,8 +33,8 @@ from pathlib import Path
 
 import numpy as np
 
-from agents.evaluate import OUTCOMES, evaluate
 from agents.registry import make_agent
+from runtime.evaluate import OUTCOMES, evaluate
 from engine import WorldConfig
 from experiments.baselines.tasks import EVAL_SEED, RESULTS_DIR, SUITE, TASKS, Task
 

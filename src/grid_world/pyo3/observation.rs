@@ -29,6 +29,8 @@ pub struct PyEntityObservation {
     #[pyo3(get)]
     pub id: u32,
     #[pyo3(get)]
+    pub kind: String,
+    #[pyo3(get)]
     pub position: (usize, usize),
     #[pyo3(get)]
     pub grid: Vec<Vec<i32>>,
@@ -40,6 +42,7 @@ impl From<EntityObservation> for PyEntityObservation {
     fn from(eo: EntityObservation) -> Self {
         PyEntityObservation {
             id: eo.id,
+            kind: eo.kind,
             position: eo.position,
             grid: eo.grid,
             status: entity_status_to_str(eo.status),

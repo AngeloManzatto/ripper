@@ -11,7 +11,7 @@ Created on Tue Oct  6 08:05:54 2026
 import time
 
 from agents.base_agent import BaseAgent
-from agents.runner import EpisodeResult, run_episode
+from runtime.runner import EpisodeResult, run_episode
 from engine import Action, World
 
 try:

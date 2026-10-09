@@ -18,6 +18,13 @@ fn entity_kind_to_cell(kind: EntityKind) -> i32 {
     }
 }
 
+fn entity_kind_to_string(kind: EntityKind) -> String {
+    match kind {
+        EntityKind::Player => "player",
+        EntityKind::Enemy => "enemy",
+    }.to_string()
+}
+
 fn tile_kind_to_cell(kind: TileKind) -> i32 {
     match kind {
         TileKind::Free => 0,
@@ -33,6 +40,7 @@ fn tile_kind_to_cell(kind: TileKind) -> i32 {
 
 pub struct EntityObservation {
     pub id: u32,
+    pub kind: String, 
     pub position: (usize, usize),
     pub grid: Vec<Vec<i32>>,
     pub status: EntityStatus,
@@ -88,6 +96,7 @@ impl World {
 
             EntityObservation {
                 id,
+                kind: entity_kind_to_string(self.ecs.kind_of(id)),
                 position: self.ecs.position_of(id),
                 grid,
                 status: self.ecs.status_of(id),

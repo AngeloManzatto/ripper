@@ -86,6 +86,17 @@ impl World {
             truncated: false,
         };
     }
+
+    pub fn remove_dead(&mut self)
+    {
+        for enemy_id in self.ecs.enemy_ids(){
+
+            if self.ecs.status_of(enemy_id) != EntityStatus::Alive {
+                self.ecs.despawn(enemy_id);
+            }
+        }
+    }
+
 }
 
 //-----------------------------------------------------
@@ -157,17 +168,14 @@ impl World {
             self.ecs.set_position(id, final_position);
         }
 
-        // 3. Trap collision: player -> self.done = true; enemy -> self.ecs.despawn(id)
+        // 3. Trap collision resolution
         for (&id, _) in resolved_actions.iter() {
             if self.check_trap_collision(id) {
                 if id == player_id {
                     self.done = true;
                     terminated = true;
-                    self.ecs.set_status(id, EntityStatus::Trapped);
-                } else {
-                    // Eliminate enemy from the map.
-                    self.ecs.despawn(id);
                 }
+                self.ecs.set_status(id, EntityStatus::Trapped);
             }
         }
 
@@ -184,218 +192,25 @@ impl World {
             self.ecs.set_status(player_id, EntityStatus::Caught);
         }
 
-        // 5. FOW update (only still-alive ids)
+        // 5. FOW update (all entities still in the ECS, including ones that just died).
         for &id in resolved_actions.keys() {
-            if self.ecs.ids().any(|alive_id| alive_id == id) {
-                let pos = self.ecs.position_of(id);
-                let perception_range = self.ecs.perception_of(id);
-                self.update_discovered(id, pos, perception_range);
-            }
+            let pos = self.ecs.position_of(id);
+            let perception_range = self.ecs.perception_of(id);
+            self.update_discovered(id, pos, perception_range);
         }
 
+        let observation = self.observation();
+
+        // Remove dead entities
+        self.remove_dead();
+
         TimeStep {
-            observation: self.observation(),
+            observation: observation,
             terminated,
             truncated: false,
         }
     }
 }
 
-//-----------------------------------------------------
-// Tests
-//-----------------------------------------------------
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::grid_world::entity::EntityStatus;
-    use std::collections::HashMap;
-
-    fn default_layout() -> &'static str {
-        "#####\n\
-         #P.T#\n\
-         #...#\n\
-         #..G#\n\
-         #####"
-    }
-
-    fn layout_with_enemy() -> &'static str {
-        "#####\n\
-         #P.E#\n\
-         #...#\n\
-         #..G#\n\
-         #####"
-    }
-
-    #[test]
-    fn from_layout_builds_correct_dimensions_and_positions() {
-        let world = World::from_layout(default_layout(), &WorldConfig::default());
-
-        assert_eq!(world.width, 5);
-        assert_eq!(world.height, 5);
-
-        let player_id = world.ecs.player_id();
-        assert_eq!(world.ecs.position_of(player_id), (1, 1));
-        assert_eq!(
-            world.find_tiles_position_by_kind(TileKind::Goal),
-            vec![(3, 3)]
-        );
-        assert_eq!(
-            world.find_tiles_position_by_kind(TileKind::Trap),
-            vec![(1, 3)]
-        );
-    }
-
-    #[test]
-    fn step_moves_player_into_free_cell() {
-        let mut world = World::from_layout(default_layout(), &WorldConfig::default());
-        let player_id = world.ecs.player_id();
-        let mut rng = rand::thread_rng();
-
-        let mut actions = HashMap::new();
-        actions.insert(player_id, Action::Right); // (1,1) -> (1,2), free
-
-        let step = world.step(actions, &mut rng);
-
-        assert_eq!(world.ecs.position_of(player_id), (1, 2));
-        assert!(!step.terminated);
-        assert!(!step.truncated);
-        assert!(!world.done);
-    }
-
-    #[test]
-    fn step_blocked_by_wall_leaves_player_in_place() {
-        let mut world = World::from_layout(default_layout(), &WorldConfig::default());
-        let player_id = world.ecs.player_id();
-        let mut rng = rand::thread_rng();
-
-        let mut actions = HashMap::new();
-        actions.insert(player_id, Action::Left); // (1,1) -> (1,0), wall
-
-        world.step(actions, &mut rng);
-
-        assert_eq!(world.ecs.position_of(player_id), (1, 1));
-    }
-
-    #[test]
-    fn step_player_reaches_goal_sets_done_and_terminated() {
-        let mut world = World::from_layout(default_layout(), &WorldConfig::default());
-        let player_id = world.ecs.player_id();
-        let mut rng = rand::thread_rng();
-
-        // Walk player from (1,1) to (3,3): down, down, right, right
-        let path = [Action::Down, Action::Down, Action::Right, Action::Right];
-        let mut step = None;
-        for action in path {
-            let mut actions = HashMap::new();
-            actions.insert(player_id, action);
-            step = Some(world.step(actions, &mut rng));
-            if world.done {
-                break;
-            }
-        }
-
-        let step = step.expect("at least one step ran");
-        assert!(world.done);
-        assert!(step.terminated);
-        assert!(!step.truncated);
-        assert_eq!(world.ecs.status_of(player_id), EntityStatus::GoalReached);
-    }
-
-    #[test]
-    fn step_player_hits_trap_sets_done_and_terminated() {
-        let mut world = World::from_layout(default_layout(), &WorldConfig::default());
-        let player_id = world.ecs.player_id();
-        let mut rng = rand::thread_rng();
-
-        // (1,1) -> (1,2) -> (1,3) is the trap
-        for action in [Action::Right, Action::Right] {
-            let mut actions = HashMap::new();
-            actions.insert(player_id, action);
-            world.step(actions, &mut rng);
-        }
-
-        assert!(world.done);
-        assert_eq!(world.ecs.status_of(player_id), EntityStatus::Trapped);
-    }
-
-    #[test]
-    fn step_timeout_sets_truncated() {
-        let mut config = WorldConfig::default();
-        config.max_tick = 1;
-        let mut world = World::from_layout(default_layout(), &config);
-        let player_id = world.ecs.player_id();
-        let mut rng = rand::thread_rng();
-
-        let mut actions = HashMap::new();
-        actions.insert(player_id, Action::Right);
-
-        let step = world.step(actions, &mut rng);
-
-        assert!(world.done);
-        assert!(step.truncated);
-        assert!(!step.terminated);
-    }
-
-    #[test]
-    fn step_enemy_collision_sets_done_and_caught() {
-        let mut world = World::from_layout(layout_with_enemy(), &WorldConfig::default());
-        let player_id = world.ecs.player_id();
-        let enemy_id = world.ecs.enemy_ids()[0];
-        let mut rng = rand::thread_rng();
-
-        // Player (1,1) -> (1,2); Enemy (1,3) -> (1,2): collide
-        let mut actions = HashMap::new();
-        actions.insert(player_id, Action::Right);
-        actions.insert(enemy_id, Action::Left);
-
-        let step = world.step(actions, &mut rng);
-
-        assert!(world.done);
-        assert!(step.terminated);
-        assert_eq!(world.ecs.status_of(player_id), EntityStatus::Caught);
-    }
-
-    #[test]
-    fn reset_restores_original_spawn_positions() {
-        let mut world = World::from_layout(default_layout(), &WorldConfig::default());
-        let player_id = world.ecs.player_id();
-        let mut rng = rand::thread_rng();
-
-        let mut actions = HashMap::new();
-        actions.insert(player_id, Action::Right);
-        world.step(actions, &mut rng);
-        assert_ne!(world.ecs.position_of(player_id), (1, 1)); // confirm it actually moved
-
-        world.reset();
-
-        let player_id_after = world.ecs.player_id();
-        assert_eq!(world.ecs.position_of(player_id_after), (1, 1));
-        assert!(!world.done);
-        assert_eq!(world.tick, 0);
-    }
-
-    #[test]
-    fn reposition_entities_returns_some_with_default_config() {
-        let mut world = World::from_layout(default_layout(), &WorldConfig::default());
-        let mut rng = rand::thread_rng();
-
-        let result = world.reposition_entities(&mut rng);
-
-        assert!(result.is_some());
-    }
-
-    #[test]
-    fn reset_remembers_initial_view() {
-        let mut world = World::from_layout(default_layout(), &WorldConfig::default());
-        world.reset();
-        let pid = world.ecs.player_id();
-        let pos = world.ecs.position_of(pid);
-        let range = world.ecs.perception_of(pid);
-        let discovered = world.ecs.discovered_of(pid);
-        for cell in world.get_visible_cells(pos, range) {
-            assert!(discovered.contains(&cell));
-        }
-    }
-    
-}
+mod tests;

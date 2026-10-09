@@ -24,7 +24,7 @@ run of each. Values are mean +- std (in %) across agent seeds.
 import json
 from pathlib import Path
 
-from agents.evaluate import OUTCOMES
+from runtime.evaluate import OUTCOMES
 from experiments.baselines.tasks import RESULTS_DIR, SUITE
 
 ###############################################################################
