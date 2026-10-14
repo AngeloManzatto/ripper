@@ -8,34 +8,17 @@ Created on Mon Oct  5 08:55:10 2026
 # libraries
 ###############################################################################
 
-"""
-Base agent contract for RIPPER.
-
-An agent is a pure policy:
-    - it sees ONLY its own EntityObservation (never the full Observation)
-    - it returns an Action
-    - it never steps the world, never manages episodes, never runs loops
-      (that is the job of the play / evaluate pipeline)
-
-Randomness: every agent owns a seeded rng, separate from the engine's rng,
-so agent seed and level seed can vary independently.
-"""
-
-###############################################################################
-# Libraries
-###############################################################################
-
 from abc import ABC, abstractmethod
 from collections import deque
 
 import numpy as np
 
 from engine import Action, EntityObservation
+from core.transition import Transition
 
 ###############################################################################
 # Base Agent
 ###############################################################################
-
 
 class BaseAgent(ABC):
     """
@@ -63,6 +46,9 @@ class BaseAgent(ABC):
         # Last observations THIS agent has seen in the current episode.
         # history[-1] is the current obs, history[-2] the previous one, ...
         self.history: deque[EntityObservation] = deque(maxlen=history_size)
+        
+        # Training / Evaluation flag
+        self.training = True
 
     ###########################################################################
     # Episode / step API (called by the pipeline)
@@ -101,18 +87,14 @@ class BaseAgent(ABC):
 
     def on_transition(
         self,
-        obs: EntityObservation,
-        action: Action,
-        next_obs: EntityObservation,
-        terminated: bool,
-        truncated: bool,
+        t: Transition
     ) -> None:
         """
         Learning hook. Default: do nothing (a pure policy ignores it).
 
-        terminated: the episode ended by a game outcome (goal / trapped / caught).
-        truncated:  the episode was cut by the clock. A learner should still
-                    bootstrap here, unlike on `terminated`.
+        t.terminated: the episode ended by a game outcome (goal / trapped / caught).
+        t.truncated:  the episode was cut by the clock. A learner should still
+                      bootstrap here, unlike on `terminated`.
         """
         return None
 
@@ -126,3 +108,17 @@ class BaseAgent(ABC):
         if len(self.history) < 2:
             return None
         return self.history[-2]
+    
+    ###########################################################################
+    # Train / Eval switch
+    ###########################################################################
+    
+    def set_eval_mode(self):
+        """Switch to evaluation behavior."""
+        ...
+        self.training = False
+
+    def set_train_mode(self):
+        """Switch to training behavior."""
+        ...
+        self.training = True

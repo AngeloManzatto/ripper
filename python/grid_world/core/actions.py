@@ -17,6 +17,8 @@ from engine import Action
 # Ripper engine actions for grid world
 ACTIONS = [Action.Up, Action.Down, Action.Left, Action.Right]
 
+N_ACTIONS = len(ACTIONS)
+
 # Ripper directions by name
 DIRECTION_NAMES = ["up", "down", "left", "right"]
 

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from agents.base_agent import BaseAgent
+from core.transition import Transition
 from engine import World
 
 ###############################################################################
@@ -89,20 +90,23 @@ def run_episode(
         
         next_entities = {e.id: e for e in next_obs.entities}
 
-        # An entity that died this step is still in next_entities, so it gets its final on_transition (terminated=True). 
-        # Later steps it is gone.
+        truncated = ts.truncated
+        
         for entity_id, action in actions.items():
-            
-            next_entity = next_entities[entity_id]
-            
-            if entity_id in next_entities:
-                
-                status = next_entity.status
-                terminated = ts.terminated or status != "Alive"
-                
-                agents[entity_id].on_transition(
-                    entities[entity_id], action, next_entity, terminated, ts.truncated,
+
+            if entity_id not in next_entities:
+                raise RuntimeError(
+                    f"Entity {entity_id} acted but is missing from the step's final observation"
                 )
+
+            entity_obs = entities[entity_id]
+            next_entity_obs = next_entities[entity_id]
+
+            terminated = ts.terminated or next_entity_obs.status != "Alive"
+
+            transition = Transition(entity_obs, action, next_entity_obs, terminated, truncated)
+
+            agents[entity_id].on_transition(transition)
 
         entities = next_entities
         steps += 1

@@ -21,5 +21,10 @@ class RandomAgent(BaseAgent):
 
     name = "random"
 
+    def __init__(self,
+             seed=42,
+             history_size=8):
+        super().__init__(seed=seed, history_size=history_size)
+
     def select_action(self, obs: EntityObservation) -> Action:
         return ACTIONS[self.rng.integers(len(ACTIONS))]

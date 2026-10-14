@@ -11,12 +11,11 @@ Created on Wed Oct  7 09:11:36 2026
 import numpy as np
 
 from core.actions import DIRECTIONS, DIRECTION_NAMES
+from core.cells import UNKNOWN, WALL, PLAYER, ENEMY, TRAP, GOAL
 
 ###############################################################################
 # Globals
 ###############################################################################
-
-UNKNOWN, FREE, WALL, PLAYER, ENEMY, TRAP, GOAL = -1, 0, 1, 2, 3, 4, 5
 
 NEIGHBOR_SYMBOLS = {"wall": WALL, "trap": TRAP, "hostile": None}   # hostile resolved per observer
 
@@ -183,7 +182,7 @@ def unknown_fractions(grid, origin, unknown_id=UNKNOWN):
     Order matches DIRECTIONS: [Up, Down, Left, Right]
       Up    -> cells with row <  origin_row   (all columns)
       Down  -> cells with row >  origin_row
-      Left  -> cells with col <  origin_col   (all rows)Globals
+      Left  -> cells with col <  origin_col   (all rows)
       Right -> cells with col >  origin_col
     The observer's own row/column is excluded. An empty half returns 0.0.
     """

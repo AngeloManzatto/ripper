@@ -39,20 +39,8 @@ class ScriptedAgent(BaseAgent):
         
     def on_transition(
         self,
-        obs: EntityObservation,
-        action: Action,
-        next_obs: EntityObservation,
-        terminated: bool,
-        truncated: bool,
+        t: Transition
     ) -> None:
-        
-        t = Transition(
-            obs,
-            action,
-            next_obs, 
-            terminated,
-            truncated
-        )
         
         self.transitions.append(t)
         
