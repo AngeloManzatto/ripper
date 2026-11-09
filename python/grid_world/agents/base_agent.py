@@ -8,11 +8,13 @@ Created on Mon Oct  5 08:55:10 2026
 # libraries
 ###############################################################################
 
+import copy
 from abc import ABC, abstractmethod
 from collections import deque
 
 import numpy as np
 
+from core.actions import ACTIONS
 from engine import Action, EntityObservation
 from core.transition import Transition
 
@@ -31,6 +33,24 @@ class BaseAgent(ABC):
 
     Subclasses implement `select_action` (required) and may override
     `on_reset` and `on_transition` (optional).
+
+    Persistence and copies, also part of the contract:
+
+        agent.save(path)       # write what the agent has learned to a file
+        agent.load(path)       # read it back into this agent
+        other = agent.clone()  # an independent copy that plays the same way
+
+    Every agent also records its own episode, whatever it is:
+
+        agent.positions   # the cell it stood on at each decision of the episode, in order
+        agent.actions     # the action it chose at each of those decisions, as an index into
+                          # core.actions.ACTIONS (a plain int: engine actions cannot be pickled)
+
+    Both are emptied by `reset()`, so after an episode they hold that episode until the
+    next one starts. Read them, do not change them.
+
+    An agent with something to store overrides `save` and `load`. The defaults
+    raise NotImplementedError, so asking an agent that cannot do it fails loudly.
     """
 
     name: str = "base"
@@ -50,6 +70,10 @@ class BaseAgent(ABC):
         # Training / Evaluation flag
         self.training = True
 
+        # Record of the current episode: one entry per decision, never truncated
+        self.positions: list[tuple] = []
+        self.actions: list[int] = []
+
     ###########################################################################
     # Episode / step API (called by the pipeline)
     ###########################################################################
@@ -65,11 +89,21 @@ class BaseAgent(ABC):
                 f"{type(self).__name__}.select_action must return an Action, "
                 f"got {type(action).__name__}"
             )
+
+        # Recorded together and only after a valid action, so the lists stay aligned.
+        # The action is stored as its index in ACTIONS: ints and tuples can be pickled and
+        # saved, the engine's Action objects cannot. ValueError if it is not one of ACTIONS.
+        index = ACTIONS.index(action)
+        self.positions.append(tuple(obs.position))
+        self.actions.append(index)
+
         return action
 
     def reset(self) -> None:
         """Called before every episode. Clears per-episode memory."""
         self.history.clear()
+        self.positions.clear()
+        self.actions.clear()
         self.on_reset()
 
     ###########################################################################
@@ -97,6 +131,27 @@ class BaseAgent(ABC):
                       bootstrap here, unlike on `terminated`.
         """
         return None
+
+    ###########################################################################
+    # Persistence and copies
+    ###########################################################################
+
+    def save(self, path) -> None:
+        """Write what the agent has learned (its policy) to `path`."""
+        raise NotImplementedError(f"{type(self).__name__} does not implement save")
+
+    def load(self, path) -> None:
+        """Read what `save` wrote into this agent. A failed load changes nothing."""
+        raise NotImplementedError(f"{type(self).__name__} does not implement load")
+
+    def clone(self) -> "BaseAgent":
+        """An independent copy: same policy, same mode, same rng state, shares
+        nothing with this agent, and starts with a clean episode (empty history).
+        Learners that must not copy everything (replay buffer, optimizer) override it."""
+        empty_history = deque(maxlen=self.history.maxlen)
+        other = copy.deepcopy(self, {id(self.history): empty_history})
+        other.reset()
+        return other
 
     ###########################################################################
     # Convenience

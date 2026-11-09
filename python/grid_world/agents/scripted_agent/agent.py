@@ -8,6 +8,8 @@ Created on Fri Oct  9 17:35:05 2026
 # Libraries
 ###############################################################################
 
+import copy
+
 from agents.base_agent import BaseAgent
 from core.transition import Transition
 
@@ -33,6 +35,14 @@ class ScriptedAgent(BaseAgent):
         # Pop the first action from the list
         return self.action_list.pop(0)
             
+    def clone(self) -> "ScriptedAgent":
+        # The script holds engine Actions, which cannot be deep-copied: the copy gets a new
+        # list with the same (immutable) actions. Transitions belong to the episode, not the copy.
+        other = ScriptedAgent(self.original_list, history_size=self.history.maxlen)
+        other.rng = copy.deepcopy(self.rng)
+        other.training = self.training
+        return other
+
     def on_reset(self) -> None:
         self.action_list = self.original_list.copy()
         self.transitions = []
@@ -43,4 +53,3 @@ class ScriptedAgent(BaseAgent):
     ) -> None:
         
         self.transitions.append(t)
-        

@@ -40,3 +40,4 @@ def hostile_code(kind: str) -> int:
     if kind == KIND_ENEMY:
         return PLAYER
     raise ValueError(f"Unknown entity kind: {kind!r}")
+    

@@ -25,6 +25,7 @@ Every run writes a new folder (never overwrites):
 """
 
 import csv
+import copy
 import json
 import subprocess
 from dataclasses import asdict
@@ -34,6 +35,7 @@ from pathlib import Path
 import numpy as np
 
 from agents.registry import make_agent
+from runtime.train import train_agent
 from runtime.evaluate import OUTCOMES, evaluate
 from engine import WorldConfig
 from experiments.baselines.tasks import EVAL_SEED, RESULTS_DIR, SUITE, TASKS, Task
@@ -41,7 +43,6 @@ from experiments.baselines.tasks import EVAL_SEED, RESULTS_DIR, SUITE, TASKS, Ta
 ###############################################################################
 # Helpers
 ###############################################################################
-
 
 def _code_version() -> str | None:
     """Short git hash of the code that produced the run (None if unavailable)."""
@@ -60,10 +61,19 @@ def _mean_std(values: list[float]) -> dict[str, float]:
     std = float(np.std(values, ddof=1)) if len(values) > 1 else 0.0
     return {"mean": float(np.mean(values)), "std": std}
 
+def _describe(obj):
+    """JSON fallback: record what an object is and its simple settings."""
+    if isinstance(obj, np.generic):          # numpy scalars -> plain numbers
+        return obj.item()
+    params = {
+        k: v for k, v in getattr(obj, "__dict__", {}).items()
+        if isinstance(v, (int, float, str, bool, type(None)))
+    }
+    return {"class": type(obj).__name__, **params}
+
 ###############################################################################
 # Run benchmark
 ###############################################################################
-
 
 def run_benchmark(
     agent_name: str,
@@ -71,9 +81,17 @@ def run_benchmark(
     agent_params: dict | None = None,
     agent_seeds=range(5),
     n_episodes: int = 200,
+    train_episodes: int = 0,
+    train_seed: int = EVAL_SEED + 100_000,
     results_dir: Path | None = None,
 ) -> Path:
     """Run and save one benchmark. Returns the run folder."""
+    
+    if train_episodes > 0:
+        overlaps = (train_seed < EVAL_SEED + n_episodes
+                    and train_seed + train_episodes > EVAL_SEED)
+        if overlaps:
+            raise ValueError("training layouts overlap the evaluation layouts")
 
     agent_params = agent_params or {}
     agent_seeds = list(agent_seeds)
@@ -85,7 +103,12 @@ def run_benchmark(
     per_seed = []
 
     for agent_seed in agent_seeds:
-        agent = make_agent(agent_name, agent_seed, **agent_params)
+        agent = make_agent(agent_name, agent_seed, **copy.deepcopy(agent_params))
+        
+        if train_episodes > 0:
+            train_agent(agent, train_episodes, train_seed,
+                        generation_kwargs=task.generation_kwargs,
+                        world_config=world_config)
 
         summary = evaluate(
             agent,
@@ -120,11 +143,13 @@ def run_benchmark(
         "agent": {"name": agent_name, "params": agent_params},
         "agent_seeds": agent_seeds,
         "n_episodes": n_episodes,
+        "train_episodes": train_episodes,
+        "train_seed": train_seed,
         "eval_seed": EVAL_SEED,
         "code_version": _code_version(),
         "created": now.isoformat(timespec="seconds"),
     }
-    (run_dir / "config.json").write_text(json.dumps(config, indent=2))
+    (run_dir / "config.json").write_text(json.dumps(config, indent=2, default=_describe))
 
     with open(run_dir / "episodes.csv", "w", newline="") as f:
         writer = csv.writer(f)
@@ -140,7 +165,6 @@ def run_benchmark(
 ###############################################################################
 # Main: random baseline on every task
 ###############################################################################
-
 
 def main(agent_name: str = "random", **kwargs) -> None:
     for task in TASKS.values():

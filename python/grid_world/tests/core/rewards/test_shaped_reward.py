@@ -118,7 +118,121 @@ def test_being_caught_in_place_is_not_a_bump():
     grid = with_goal(5, 5, (2, 2))
     t = transition(grid, (0, 0), grid, (0, 0), status="Caught")
     assert np.isclose(reward(t), 0.0)
+    
+    
+# 
 
+def revisit_reward(window=8):
+    return ShapedGoalReward(gamma=1.0, w_goal=0.0, w_explore=0.0,
+                            w_bump=0.0, w_revisit=0.2, window=window)
+
+
+def go(reward, grid, a, b):
+    return reward(transition(grid, a, grid, b))
+
+
+def test_going_back_is_penalized():
+    reward, grid = revisit_reward(), with_goal(5, 5, (4, 4))
+    assert np.isclose(go(reward, grid, (0, 0), (0, 1)), 0.0)
+    assert np.isclose(go(reward, grid, (0, 1), (0, 0)), -0.2)
+
+
+def test_new_cells_are_not_penalized():
+    reward, grid = revisit_reward(), with_goal(5, 5, (4, 4))
+    assert np.isclose(go(reward, grid, (0, 0), (0, 1)), 0.0)
+    assert np.isclose(go(reward, grid, (0, 1), (0, 2)), 0.0)
+
+
+def test_a_bump_is_not_a_revisit():
+    reward, grid = revisit_reward(), with_goal(5, 5, (4, 4))
+    go(reward, grid, (0, 0), (0, 1))
+    assert np.isclose(go(reward, grid, (0, 1), (0, 1)), 0.0)
+
+
+def test_reset_forgets_the_episode():
+    reward, grid = revisit_reward(), with_goal(5, 5, (4, 4))
+    go(reward, grid, (0, 0), (0, 1))
+    reward.reset()
+    assert np.isclose(go(reward, grid, (0, 1), (0, 0)), 0.0)
+
+
+def test_old_cells_are_forgotten_after_the_window():
+    path = [(0, 0), (0, 1), (0, 2), (0, 3)]
+    grid = with_goal(5, 5, (4, 4))
+
+    short = revisit_reward(window=3)                  # remembers 2 cells
+    for a, b in zip(path, path[1:]):
+        go(short, grid, a, b)
+    assert np.isclose(go(short, grid, (0, 3), (0, 0)), 0.0)
+
+    long = revisit_reward(window=8)
+    for a, b in zip(path, path[1:]):
+        go(long, grid, a, b)
+    assert np.isclose(go(long, grid, (0, 3), (0, 0)), -0.2)
+
+
+def test_revisit_penalty_is_off_by_default():
+    reward = ShapedGoalReward(gamma=1.0, w_goal=0.0, w_explore=0.0, w_bump=0.0)
+    grid = with_goal(5, 5, (4, 4))
+    go(reward, grid, (0, 0), (0, 1))
+    assert np.isclose(go(reward, grid, (0, 1), (0, 0)), 0.0)
+
+
+def test_window_must_be_at_least_one():
+    for bad in (0, -3):
+        try:
+            ShapedGoalReward(window=bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"window={bad} should have raised")
+
+
+def test_window_one_never_penalizes_revisits():
+    reward = revisit_reward(window=1)
+    grid = with_goal(5, 5, (4, 4))
+    go(reward, grid, (0, 0), (0, 1))
+    assert np.isclose(go(reward, grid, (0, 1), (0, 0)), 0.0)
+    
+# 
+
+def danger_reward(**kw):
+    return ShapedGoalReward(gamma=1.0, w_goal=0.0, w_explore=0.0,
+                            w_bump=0.0, w_revisit=0.0, w_danger=0.5, **kw)
+
+
+def test_being_caught_costs_the_danger_penalty():
+    grid = with_goal(5, 5, (4, 4))
+    t = transition(grid, (0, 0), grid, (0, 1), status="Caught", terminated=True)
+    assert np.isclose(danger_reward()(t), -0.5)
+
+
+def test_being_trapped_costs_the_danger_penalty():
+    grid = with_goal(5, 5, (4, 4))
+    t = transition(grid, (0, 0), grid, (0, 1), status="Trapped", terminated=True)
+    assert np.isclose(danger_reward()(t), -0.5)
+
+
+def test_caught_in_place_pays_danger_not_bump():
+    grid = with_goal(5, 5, (4, 4))
+    reward = ShapedGoalReward(gamma=1.0, w_goal=0.0, w_explore=0.0,
+                              w_bump=0.1, w_danger=0.5)
+    t = transition(grid, (0, 0), grid, (0, 0), status="Caught", terminated=True)
+    assert np.isclose(reward(t), -0.5)
+
+
+def test_goal_and_timeout_pay_no_danger():
+    grid = with_goal(5, 5, (4, 4))
+    won = transition(grid, (0, 0), grid, (0, 1), status="GoalReached", terminated=True)
+    assert np.isclose(danger_reward()(won), 1.0)
+    timeout = transition(grid, (0, 0), grid, (0, 1), status="Playing", terminated=False)
+    assert np.isclose(danger_reward()(timeout), 0.0)
+
+
+def test_danger_penalty_is_off_by_default():
+    grid = with_goal(5, 5, (4, 4))
+    reward = ShapedGoalReward(gamma=1.0, w_goal=0.0, w_explore=0.0)
+    t = transition(grid, (0, 0), grid, (0, 1), status="Caught", terminated=True)
+    assert np.isclose(reward(t), 0.0)
 
 def run():
     test_zero_weights_equal_the_sparse_reward()
@@ -132,6 +246,19 @@ def run():
     test_a_real_move_has_no_bump_penalty()
     test_bump_penalty_is_off_by_default()
     test_being_caught_in_place_is_not_a_bump()
+    test_going_back_is_penalized()
+    test_new_cells_are_not_penalized()
+    test_a_bump_is_not_a_revisit()
+    test_reset_forgets_the_episode()
+    test_old_cells_are_forgotten_after_the_window()
+    test_revisit_penalty_is_off_by_default()
+    test_window_must_be_at_least_one()
+    test_window_one_never_penalizes_revisits()
+    test_being_caught_costs_the_danger_penalty()
+    test_being_trapped_costs_the_danger_penalty()
+    test_caught_in_place_pays_danger_not_bump()
+    test_goal_and_timeout_pay_no_danger()
+    test_danger_penalty_is_off_by_default()
     print("shaped reward: all checks passed")
 
 

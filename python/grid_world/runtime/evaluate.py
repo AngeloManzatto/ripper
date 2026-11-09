@@ -58,29 +58,19 @@ class EvalSummary:
         )
 
 ###############################################################################
-# Evaluate
+# Play episode
 ###############################################################################
 
-def evaluate(
+def play_episodes(
     agent: BaseAgent,
-    n_episodes: int = 100,
-    seed: int = 0,
+    n_episodes: int,
+    seed: int,
     generation_kwargs: dict | None = None,
     world_config: WorldConfig | None = None,
-) -> EvalSummary:
-    """
-    Play `n_episodes` episodes with `agent` controlling the player.
-
-    generation_kwargs: forwarded to GenerationConfig (width, height,
-                       wall_density, ...). The seed is set per episode.
-    world_config:      forwarded to World (max_tick, perception ranges, ...).
-    """
-
-    if n_episodes < 1:
-        raise ValueError(f"n_episodes must be >= 1, got {n_episodes}")
+) -> list[EpisodeResult]:
+    """Play episodes seed, seed+1, ... with `agent`. Does not touch its mode."""
 
     generation_kwargs = generation_kwargs or {}
-
     results: list[EpisodeResult] = []
 
     for i in range(n_episodes):
@@ -96,11 +86,44 @@ def evaluate(
             )
 
         world = World(layout, world_config, episode_seed)
-
-        # The player id can differ between layouts
         player_id = world.reset().observation.player_id
 
         results.append(run_episode(world, {player_id: agent}))
+
+    return results
+
+###############################################################################
+# Evaluate
+###############################################################################
+
+def evaluate(
+    agent: BaseAgent,
+    n_episodes: int = 100,
+    seed: int = 0,
+    generation_kwargs: dict | None = None,
+    world_config: WorldConfig | None = None,
+) -> EvalSummary:
+    """
+    Play `n_episodes` episodes with `agent` controlling the player.
+
+    The agent is FROZEN for the whole run (eval mode) and its previous mode is
+    restored afterwards, so evaluating never changes what the agent knows.
+    """
+
+    if n_episodes < 1:
+        raise ValueError(f"n_episodes must be >= 1, got {n_episodes}")
+
+    was_training = agent.training
+    agent.set_eval_mode()
+
+    try:
+        results = play_episodes(agent, n_episodes, seed, generation_kwargs, world_config)
+    finally:
+        # Restore the mode the caller had, even if an episode raised
+        if was_training:
+            agent.set_train_mode()
+        else:
+            agent.set_eval_mode()
 
     outcome_counts = {o: 0 for o in OUTCOMES}
     for r in results:

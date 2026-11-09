@@ -11,6 +11,7 @@ Created on Tue Oct  6 16:17:24 2026
 from agents.base_agent import BaseAgent
 from agents.random_agent.agent import RandomAgent
 from agents.heuristic_agent.agent import HeuristicAgent
+from agents.linear_q_agent.agent import LinearQAgent
 
 ###############################################################################
 # Registry
@@ -19,6 +20,7 @@ from agents.heuristic_agent.agent import HeuristicAgent
 AGENTS: dict[str, type[BaseAgent]] = {
     "random": RandomAgent,
     "heuristic": HeuristicAgent,
+    "q_learning" : LinearQAgent
 }
 
 def make_agent(name: str, seed: int, **params) -> BaseAgent:

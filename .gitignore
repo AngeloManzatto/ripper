@@ -28,4 +28,4 @@ logs
 # =========================
 # Results from running 
 # =========================
-/results
+/python/grid_world/experiments/results

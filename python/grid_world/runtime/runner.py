@@ -19,14 +19,23 @@ from engine import World
 # Result
 ###############################################################################
 
-
 @dataclass(frozen=True)
 class EpisodeResult:
     """
-    outcome: "GoalReached" | "Trapped" | "Caught" | "Timeout"
-    steps:   number of world steps played
+    agent_outcomes: entity id -> outcome, one entry per agent given to run_episode (entities
+                    moved by the engine have none). The outcome is the final status of the
+                    agent's entity when it is not "Alive":
+                        "GoalReached" : the player reached the exit, or an enemy caught the player
+                        "Trapped"     : the entity stepped on a trap
+                        "Caught"      : the player was caught
+                    and otherwise:
+                        "Timeout"     : the clock ended the game while the agent was alive
+                        "Alive"       : the game ended (terminated) while the agent was alive
+    steps:          number of world steps played
+    terminated:     the game ended by a game outcome of the player
+    truncated:      the game ended by the clock
     """
-    outcome: str
+    agent_outcomes: dict[int, str]
     steps: int
     terminated: bool
     truncated: bool
@@ -66,11 +75,19 @@ def run_episode(
     unknown = set(agents) - set(entities)
     if unknown:
         raise ValueError(f"Agents given for entities not in the world: {sorted(unknown)}")
-
+        
+    # Reset agent states
     for agent in agents.values():
         agent.reset()
 
+    # Last status seen of every agent's entity. The engine despawns a dead enemy right after the
+    # step it dies in, so its final status exists only in the observation of that step: keep it,
+    # because `entities` (the latest observation) no longer has the entity afterwards.
+    statuses = {agent_id: entities[agent_id].status for agent_id in agents}
+
     steps = 0
+    
+    # Execute post processing if any
     if on_step is not None:
         on_step(world, steps, {})
 
@@ -89,6 +106,10 @@ def run_episode(
         next_obs = ts.observation
         
         next_entities = {e.id: e for e in next_obs.entities}
+
+        for agent_id in statuses:
+            if agent_id in next_entities:
+                statuses[agent_id] = next_entities[agent_id].status
 
         truncated = ts.truncated
         
@@ -113,14 +134,24 @@ def run_episode(
 
         if on_step is not None:
             on_step(world, steps, actions)
+            
+    # Agent outcomes: a status that is not Alive is final, whenever it happened
+    agent_outcomes = {}
 
-    # Only the player receives GoalReached / Trapped / Caught.
-    # A timeout changes no status, so it is read from the flags.
-    outcome = entities[player_id].status if ts.terminated else "Timeout"
+    for agent_id, status in statuses.items():
 
-    return EpisodeResult(
-        outcome=outcome,
+        if status != "Alive":
+            agent_outcomes[agent_id] = status
+        elif ts.truncated:
+            agent_outcomes[agent_id] = "Timeout"
+        else:
+            agent_outcomes[agent_id] = "Alive"
+
+    result = EpisodeResult(
+        agent_outcomes=agent_outcomes,
         steps=steps,
         terminated=ts.terminated,
         truncated=ts.truncated,
-    )
+        )
+
+    return result
