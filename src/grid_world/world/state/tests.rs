@@ -3,7 +3,7 @@
 //-----------------------------------------------------
 
 use crate::grid_world::action::Action;
-use crate::grid_world::world::state::{World, WorldConfig, TimeStep};
+use crate::grid_world::world::state::{World, WorldConfig, TimeStep, is_swap};
 use crate::grid_world::entity::{TileKind};
 
 //-----------------------------------------------------
@@ -72,6 +72,33 @@ mod tests {
         assert_eq!(entity.status, expected, "status of entity {}", id);
     }
 
+    // ---------------------------------------------------------------
+    // Layouts for the swap tests (a corridor, so the entities must cross each other)
+    // ---------------------------------------------------------------
+
+    fn layout_corridor_face_to_face() -> &'static str {
+        "#######\n\
+         #PE..G#\n\
+         #######"
+    }
+
+    fn layout_corridor_enemy_behind_player() -> &'static str {
+        "#######\n\
+         #EP..G#\n\
+         #######"
+    }
+
+    fn layout_corridor_apart() -> &'static str {
+        "#######\n\
+         #P.E.G#\n\
+         #######"
+    }
+
+    fn layout_corridor_with_bystander() -> &'static str {
+        "########\n\
+         #PE.E.G#\n\
+         ########"
+    }
 
     #[test]
     fn from_layout_builds_correct_dimensions_and_positions() {
@@ -417,6 +444,132 @@ mod tests {
         assert!(step.terminated);
         assert_eq!(world.ecs.status_of(player_id), EntityStatus::Caught);
         assert_status_in_observation(&step, catcher_id, EntityStatus::GoalReached);
+        assert_status_in_observation(&step, bystander_id, EntityStatus::Alive);
+    }
+
+    // ---------------------------------------------------------------
+    // is_swap: positions only, no world
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn is_swap_detects_an_exchange() {
+        assert!(is_swap((1, 1), (1, 2), (1, 2), (1, 1)));
+    }
+
+    #[test]
+    fn is_swap_following_is_not_a_swap() {
+        // the player runs from (1,2) to (1,3) and the enemy steps into the cell it left
+        assert!(!is_swap((1, 2), (1, 3), (1, 1), (1, 2)));
+    }
+
+    #[test]
+    fn is_swap_meeting_on_one_cell_is_not_a_swap() {
+        // both end on (1,2): that is an ordinary catch, handled elsewhere
+        assert!(!is_swap((1, 1), (1, 2), (1, 3), (1, 2)));
+    }
+
+    #[test]
+    fn is_swap_nobody_moving_is_not_a_swap() {
+        assert!(!is_swap((1, 1), (1, 1), (1, 2), (1, 2)));
+    }
+
+    // ---------------------------------------------------------------
+    // Swapping places with an enemy
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn step_swapping_places_with_an_enemy_is_a_catch() {
+        let mut world = World::from_layout(layout_corridor_face_to_face(), &WorldConfig::default());
+        world.reset();
+        let player_id = world.ecs.player_id();
+        let enemy_id = world.ecs.enemy_ids()[0];
+        let mut rng = rand::thread_rng();
+
+        // Player (1,1) -> (1,2); Enemy (1,2) -> (1,1): they cross each other
+        let mut actions = HashMap::new();
+        actions.insert(player_id, Action::Right);
+        actions.insert(enemy_id, Action::Left);
+
+        let step = world.step(actions, &mut rng);
+
+        assert!(world.done);
+        assert!(step.terminated);
+        assert_eq!(world.ecs.status_of(player_id), EntityStatus::Caught);
+        assert_status_in_observation(&step, enemy_id, EntityStatus::GoalReached);
+
+        // The player stayed on its cell and the enemy is standing on it
+        assert_eq!(world.ecs.position_of(player_id), (1, 1));
+        let enemy_obs = step.observation.entities.iter().find(|e| e.id == enemy_id).unwrap();
+        assert_eq!(enemy_obs.position, (1, 1));
+    }
+
+    #[test]
+    fn step_an_enemy_following_the_player_does_not_catch() {
+        let mut world = World::from_layout(layout_corridor_enemy_behind_player(), &WorldConfig::default());
+        world.reset();
+        let player_id = world.ecs.player_id();
+        let enemy_id = world.ecs.enemy_ids()[0];
+        let mut rng = rand::thread_rng();
+
+        // Player (1,2) -> (1,3); Enemy (1,1) -> (1,2): the enemy steps into the cell the player left
+        let mut actions = HashMap::new();
+        actions.insert(player_id, Action::Right);
+        actions.insert(enemy_id, Action::Right);
+
+        let step = world.step(actions, &mut rng);
+
+        assert!(!step.terminated);
+        assert!(!world.done);
+        assert_eq!(world.ecs.position_of(player_id), (1, 3));
+        assert_eq!(world.ecs.position_of(enemy_id), (1, 2));
+    }
+
+    #[test]
+    fn step_meeting_on_the_same_cell_is_still_a_catch() {
+        let mut world = World::from_layout(layout_corridor_apart(), &WorldConfig::default());
+        world.reset();
+        let player_id = world.ecs.player_id();
+        let enemy_id = world.ecs.enemy_ids()[0];
+        let mut rng = rand::thread_rng();
+
+        // Player (1,1) -> (1,2); Enemy (1,3) -> (1,2)
+        let mut actions = HashMap::new();
+        actions.insert(player_id, Action::Right);
+        actions.insert(enemy_id, Action::Left);
+
+        let step = world.step(actions, &mut rng);
+
+        assert!(step.terminated);
+        assert_eq!(world.ecs.status_of(player_id), EntityStatus::Caught);
+        assert_status_in_observation(&step, enemy_id, EntityStatus::GoalReached);
+    }
+
+    #[test]
+    fn step_only_the_swapping_enemy_gets_goal_reached() {
+        let mut world = World::from_layout(layout_corridor_with_bystander(), &WorldConfig::default());
+        world.reset();
+        let player_id = world.ecs.player_id();
+        let enemy_ids = world.ecs.enemy_ids();
+        assert_eq!(enemy_ids.len(), 2);
+        let mut rng = rand::thread_rng();
+
+        let swapper_id = *enemy_ids
+            .iter()
+            .find(|&&id| world.ecs.position_of(id) == (1, 2))
+            .expect("one enemy starts at (1,2)");
+        let bystander_id = *enemy_ids.iter().find(|&&id| id != swapper_id).unwrap();
+
+        // The player and the swapper cross; the bystander pushes against the wall above and stays
+        let mut actions = HashMap::new();
+        actions.insert(player_id, Action::Right);
+        actions.insert(swapper_id, Action::Left);
+        actions.insert(bystander_id, Action::Up);
+
+        let step = world.step(actions, &mut rng);
+
+        assert!(step.terminated);
+        assert_eq!(world.ecs.status_of(player_id), EntityStatus::Caught);
+        assert_status_in_observation(&step, swapper_id, EntityStatus::GoalReached);
         assert_status_in_observation(&step, bystander_id, EntityStatus::Alive);
     }
 

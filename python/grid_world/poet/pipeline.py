@@ -12,14 +12,11 @@ import copy
 import time
 import numpy as np
 import random
- 
 
 from neat.config import default_config
 
-
 from engine import GenerationConfig, generate_valid_layout
  
-
 from collections import Counter
 
 from poet.child import make_child
@@ -1004,3 +1001,4 @@ pressure_report(HeuristicAgent(), "a heuristic player")
 #    meaningful there). For the single base layout (50 games) a difference under 0.1 is noise.
 #  - "easiest layout" is the layout where this enemy pressed the player least, "hardest" where it
 #    pressed most.
+

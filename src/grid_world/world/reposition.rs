@@ -84,9 +84,9 @@ impl World {
                 self.ecs.set_position(player_id, candidate_player_cell);
 
                 // Update goal on tile grid
-                self.grid[candidate_goal_cell.0][candidate_goal_cell.1] = TileKind::Goal;
                 self.grid[goal_cell.0][goal_cell.1] = TileKind::Free;
-
+                self.grid[candidate_goal_cell.0][candidate_goal_cell.1] = TileKind::Goal;
+                
                 for enemy_id in enemy_ids {
                     let enemy_pos = chosen
                         .pop()

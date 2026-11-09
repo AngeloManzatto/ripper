@@ -90,6 +90,20 @@ impl World {
 }
 
 //-----------------------------------------------------
+// Helpers
+//-----------------------------------------------------
+
+/// True when the player and an enemy exchanged cells in one tick.
+fn is_swap(
+    player_before: (usize, usize),
+    player_after: (usize, usize),
+    enemy_before: (usize, usize),
+    enemy_after: (usize, usize),
+) -> bool {
+    enemy_after == player_before && player_after == enemy_before
+}
+
+//-----------------------------------------------------
 // Step
 //-----------------------------------------------------
 
@@ -136,6 +150,12 @@ impl World {
             resolved_actions.insert(enemy_id, action);
         }
 
+        // Positions before anyone moves, to detect two entities crossing each other
+        let before: HashMap<u32, (usize, usize)> = resolved_actions
+            .keys()
+            .map(|&id| (id, self.ecs.position_of(id)))
+            .collect();
+
         // 2. Apply movement for every resolved id (clamp_move + is_walkable check)
         for (&id, &action) in resolved_actions.iter() {
             let current_position = self.ecs.position_of(id);
@@ -157,6 +177,19 @@ impl World {
             };
 
             self.ecs.set_position(id, final_position);
+        }
+
+        // 2b. Head-on swap: the player and an enemy crossed each other. Put the player back on its old
+        // cell, where that enemy now stands, so step 4 sees an ordinary catch.
+        let player_before = before[&player_id];
+        let player_after = self.ecs.position_of(player_id);
+
+        let swapped = self.ecs.enemy_ids().into_iter().any(|enemy_id| {
+            is_swap(player_before, player_after, before[&enemy_id], self.ecs.position_of(enemy_id))
+        });
+
+        if swapped {
+            self.ecs.set_position(player_id, player_before);
         }
 
         // 3. Trap collision resolution
