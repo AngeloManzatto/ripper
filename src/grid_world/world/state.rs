@@ -93,7 +93,17 @@ impl World {
 // Helpers
 //-----------------------------------------------------
 
-/// True when the player and an enemy exchanged cells in one tick.
+/*  True when the player and an enemy exchanged cells in a single tick.
+
+Everyone moves at the same time, so a player and an enemy walking toward each other would
+pass through one another: neither ends on the other's cell, and no catch is seen. This is the
+swapping conflict of multi-agent pathfinding, and `step` treats it as a catch.
+
+An enemy that only steps into the cell the player just left is not a swap, because the
+player's new cell is then not the enemy's old one.
+
+All arguments are (row, col) positions of the player and of one enemy, before and after the tick.
+*/
 fn is_swap(
     player_before: (usize, usize),
     player_after: (usize, usize),

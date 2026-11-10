@@ -2,6 +2,8 @@
 // Imports
 //-----------------------------------------------------
 
+use rand::{rngs::StdRng, SeedableRng};
+
 use crate::grid_world::action::Action;
 use crate::grid_world::world::state::{World, WorldConfig, TimeStep, is_swap};
 use crate::grid_world::entity::{TileKind};
@@ -98,6 +100,14 @@ mod tests {
         "########\n\
          #PE.E.G#\n\
          ########"
+    }
+
+    fn layout_small_room() -> &'static str {
+        "#####\n\
+         #P.E#\n\
+         #...#\n\
+         #.G.#\n\
+         #####"
     }
 
     #[test]
@@ -571,6 +581,26 @@ mod tests {
         assert_eq!(world.ecs.status_of(player_id), EntityStatus::Caught);
         assert_status_in_observation(&step, swapper_id, EntityStatus::GoalReached);
         assert_status_in_observation(&step, bystander_id, EntityStatus::Alive);
+    }
+
+    #[test]
+    fn reset_with_reposition_always_leaves_exactly_one_goal() {
+        let mut world = World::from_layout(layout_small_room(), &WorldConfig::default());
+
+        for seed in 0..500u64 {
+            let mut rng = StdRng::seed_from_u64(seed);
+            world.reset_with_reposition(&mut rng);
+
+            let goals = world.find_tiles_position_by_kind(TileKind::Goal);
+            assert_eq!(goals.len(), 1, "seed {}: expected exactly one goal", seed);
+
+            // nobody may start on the goal
+            let player_id = world.ecs.player_id();
+            assert_ne!(world.ecs.position_of(player_id), goals[0], "seed {}: player on the goal", seed);
+            for enemy_id in world.ecs.enemy_ids() {
+                assert_ne!(world.ecs.position_of(enemy_id), goals[0], "seed {}: enemy on the goal", seed);
+            }
+        }
     }
 
 }

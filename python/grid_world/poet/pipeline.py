@@ -30,8 +30,7 @@ from poet.criterion import passes_minimal_criterion
 from poet.games import split_roles, build_game, run_game, watch_game, play_games, goal_rate
 from poet.environment import make_world, mutate_layout, layout_picture, layout_distance
 from poet.transfer import role_rate, transfer_into, transfer_round
-from poet.generalization import held_out_layouts, pressure_on_layouts, skill_on_layouts, summarize
-
+from poet.generalization import (held_out_layouts, player_outcomes_on_layouts, pressure_on_layouts,skill_on_layouts, summarize)
 from agents.heuristic_agent.agent import HeuristicAgent
 
 from experiments.poet.learner_config import TrainConfig, ChampionConfig, check_seed_ranges
@@ -1002,3 +1001,127 @@ pressure_report(HeuristicAgent(), "a heuristic player")
 #  - "easiest layout" is the layout where this enemy pressed the player least, "hardest" where it
 #    pressed most.
 
+###############################################################################
+# Next piece: what do the enemies do? (append to the end of pipeline_v2.py)
+###############################################################################
+#
+# No new imports: it uses np, Counter, run_game, watch_game, HeuristicAgent, `layout`, `latest`,
+# `untrained_enemy`, `families`, `enemies`, `GAME_SEED` and `pressure_report` that already exist.
+# Run the three parts one after the other, in this order. Total: about 7 minutes.
+
+# 0) Save the pool (overwrites the previous file)
+import pickle
+with open("pool_after_fixes.pkl", "wb") as f:
+    pickle.dump({"pool": latest["pool"], "generation": latest["generation"]}, f)
+
+# PART A + B: numbers for three enemies, then two watched games (1 minute + the games)
+GOAL_CODE = 5                       # the cell value of the goal in an observation grid
+BEHAVIOUR_SEEDS = range(600_000, 600_000 + 40)
+
+weaker_player = latest["pool"][0].learners["player"].agent()
+
+def enemy_behaviour(enemy, player, seeds):
+    """One row per game: how the enemy moved, measured with the positions it recorded."""
+    rows = []
+    for seed in seeds:
+        e, p = enemy.clone(), player.clone()
+        result, role_of = run_game(layout, seed, {"player": p, "enemy_0": e})
+        outcome = {role_of[i]: o for i, o in result.agent_outcomes.items()}["player"]
+
+        row = {"seed": seed, "outcome": outcome, "steps": len(e.positions), "found_goal": False}
+
+        goal = np.argwhere(np.array(e.history[-1].grid) == GOAL_CODE)      # only if the enemy ever saw it
+        if len(goal) > 0:
+            row["found_goal"] = True
+            gr, gc = goal[0]
+            to_goal = [abs(r - gr) + abs(c - gc) for r, c in e.positions]
+            row["near_goal"] = sum(d <= 2 for d in to_goal) / len(to_goal)  # share of steps within 2 cells
+
+        to_player = [abs(a[0] - b[0]) + abs(a[1] - b[1]) for a, b in zip(e.positions, p.positions)]
+        row["to_player"] = sum(to_player) / len(to_player)                  # mean distance to the player
+        rows.append(row)
+    return rows
+
+def show_behaviour(name, rows):
+    found = [r for r in rows if r["found_goal"]]
+    print(f"{name:22s} | player: {dict(Counter(r['outcome'] for r in rows))}")
+    print(f"{'':22s} | found the goal in {len(found)}/{len(rows)} games"
+          f" | steps within 2 cells of the goal: {sum(r['near_goal'] for r in found) / max(1, len(found)):.2f}"
+          f" | mean distance to the player: {sum(r['to_player'] for r in rows) / len(rows):.1f}")
+
+enemies_to_look_at = {
+    "heuristic enemy":         HeuristicAgent(),
+    "learned enemy (entry 1)": latest["pool"][1].learners["enemy_0"].agent(),
+    "untrained enemy":         untrained_enemy,
+}
+
+print("on the base layout, against the weaker learned player of pool entry 0, 40 games")
+behaviour = {}
+for name, enemy in enemies_to_look_at.items():
+    behaviour[name] = enemy_behaviour(enemy, weaker_player, BEHAVIOUR_SEEDS)
+    show_behaviour(name, behaviour[name])
+
+# How to read it:
+#  - "steps within 2 cells of the goal" high for the heuristic enemy (say 0.5 or more) and low for the
+#    others: the guess is right, the heuristic is a goal guard.
+#  - "mean distance to the player" low for an enemy that chases, high for one that waits somewhere.
+#  - "found the goal" low for the learned enemy: it may simply not find the goal in most games.
+
+###############################################################################
+# Watching: the same game with the heuristic enemy and with the learned enemy
+###############################################################################
+
+caught = [r["seed"] for r in behaviour["heuristic enemy"] if r["outcome"] == "Caught"]
+seed = caught[0] if caught else BEHAVIOUR_SEEDS[0]
+
+for name in ("heuristic enemy", "learned enemy (entry 1)"):
+    print(f"\n--- {name} | seed {seed} ---")
+    watch_game(layout, seed, {"player": weaker_player.clone(), "enemy_0": enemies_to_look_at[name].clone()}, delay=0.3)
+
+
+###############################################################################
+# PART C) The pressure test against a WEAKER player (about 5 minutes)
+###############################################################################
+#
+# The heuristic player wins ~0.85-0.90, so an enemy has little left to catch. A learned player of
+# the pool wins less, so there is room. Read, for each family, the pool enemies MINUS the
+# "untrained (the floor)" line: the floor is higher here because a weaker player fails more on its own.
+# Last time against the heuristic player the gap was about +0.05; the heuristic enemy got +0.25 here
+# in the old run.
+
+pressure_report(weaker_player, "a weaker (learned) player: pool entry 0")
+
+###############################################################################
+# Piece: catching or stalling? (append this to pipeline_v2.py, after the pressure blocks)
+###############################################################################
+#
+# Change to the import of the generalization block:
+#
+#   from poet.generalization import (held_out_layouts, player_outcomes_on_layouts, pressure_on_layouts,
+#                                    skill_on_layouts, summarize)
+#
+# It uses `families`, `enemies`, `GAME_SEED`, `PRESSURE_GAMES` and `weaker_player` from the earlier
+# blocks. About 5 minutes.
+#
+# Why: "pressure" counted every game the player did not win, so an enemy that makes the player
+# TIME OUT looked as strong as one that CATCHES it. The minimal criterion wants catches and
+# penalizes timeouts. Here the games of the same fixed player are split by how they end.
+
+def outcomes_report(fixed_player, player_name):
+    for family, layouts in families.items():
+        print(f"\nhow the games of {player_name} end | {family}")
+        for name, agent in enemies.items():
+            rows = player_outcomes_on_layouts(agent, layouts, fixed_player, PRESSURE_GAMES, GAME_SEED)
+            mean = {key: sum(row[key] for row in rows) / len(rows) for key in rows[0]}
+            print(f"  {name:26s} caught {mean['caught']:.2f} | timeout {mean['timeout']:.2f}"
+                  f" | trapped {mean['trapped']:.2f} | player reached the goal {mean['goal']:.2f}")
+
+outcomes_report(weaker_player, "the weaker learned player (pool entry 0)")
+
+# How to read it (means over the layouts of each family; the single base layout has only 50 games):
+#  - "caught" is what the criterion wants from an enemy. Compare each pool enemy with the
+#    "untrained" line and with the heuristic one.
+#  - "timeout" is stalling. The heuristic enemy (a goal guard) should show much more of it.
+#  - caught + timeout + trapped + goal = 1 on each line. The old "pressure" was the first three added.
+#  - If the pool enemies catch clearly more than the untrained one on the layouts they never saw,
+#    they learned to hunt, and the heuristic's lead in the pressure table was stalling.
