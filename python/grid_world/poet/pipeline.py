@@ -11,6 +11,8 @@ Created on Mon Nov  2 08:46:42 2026
 import copy
 import time
 import numpy as np
+import os
+import pickle
 import random
 
 from neat.config import default_config
@@ -41,7 +43,16 @@ from experiments.poet.neat_learner import NeatLearner
 ###############################################################################
 # Settings
 ###############################################################################
- 
+
+RUN              = "baseline_s1"   # names this run's files
+SEED             = 1               # seeds the learners and the training order; the base layout stays the same
+N_WALL_MUTATIONS = 8
+MAX_WALL_DENSITY = 0.45
+TIMEOUT_CAP      = 0.3
+N_TRANSFER       = 2               # None means no transfer
+GAMES_PER_GENOME = 20
+EVALUATE         = False           # True: after the run, also run the evaluation blocks below
+
 generation_config = {
     "width"  : 16,
     "height" : 16,
@@ -52,8 +63,8 @@ generation_config = {
 }
  
 mutation_config = {
-    "n_wall_mutations" : 4,
-    "max_wall_density" : 0.3,
+    "n_wall_mutations" : N_WALL_MUTATIONS,
+    "max_wall_density" : MAX_WALL_DENSITY,
     "max_enemies" : 1,
     "enemy_add_weight"     : 0.0,
     "enemy_remove_weight"  : 0.0,
@@ -172,8 +183,8 @@ print("same seed, same game      :", (again.agent_outcomes, again.steps) == (fir
 ###############################################################################
  
 # The same game as run_game(layout, 3, ...) drawn frame by frame; it returns the agents by role
-agents_by_role = watch_game(layout, 3, {"player": HeuristicAgent()}, delay=0.1)
-print("agents by role:", agents_by_role)
+# (drawing frames is for a local session only)
+# agents_by_role = watch_game(layout, 3, {"player": HeuristicAgent()}, delay=0.1)
 
 ###############################################################################
 # Piece: play_games
@@ -576,7 +587,7 @@ else:
 neat_config = default_config()
 
 # The numbers of your old grow_entry: a population of 50, 10 generations per call, 20 games per genome
-learner_train = TrainConfig(population_size=50, n_generations=10, n_games=20, n_valid_games=50, k_neighbours=10)
+learner_train = TrainConfig(population_size=50, n_generations=10, n_games=GAMES_PER_GENOME, n_valid_games=50, k_neighbours=10)
 learner_champion = ChampionConfig(n_finalists=5, n_score_games=20, n_final_games=100)
 check_seed_ranges(learner_train, learner_champion)
 
@@ -587,8 +598,8 @@ print("calls of train() before the training seeds reach the validation games:",
 # 1) What a NeatLearner is, and what an untrained pair does
 ###############################################################################
 
-player_learner = NeatLearner("player", neat_config, learner_train, learner_champion, seed=0)
-enemy_learner = NeatLearner("enemy_0", neat_config, learner_train, learner_champion, seed=1)
+player_learner = NeatLearner("player", neat_config, learner_train, learner_champion, seed=SEED)
+enemy_learner = NeatLearner("enemy_0", neat_config, learner_train, learner_champion, seed=SEED+1)
 
 print("is a Learner       :", isinstance(player_learner, Learner))                  # Expected: True
 print("population         :", len(player_learner.state["genomes"]), "| generation", player_learner.state["generation"])
@@ -658,7 +669,7 @@ print("learner unchanged  :", guarded.state["generation"] == quick.last_generati
 MAX_ROUNDS = 20
 
 entry = Entry(layout, {"player": player_learner, "enemy_0": enemy_learner})
-rng = random.Random(0)
+rng = random.Random(SEED)
 
 def learner_line(role):
     learner = entry.learners[role]
@@ -669,7 +680,7 @@ def learner_line(role):
 for round_number in range(1, MAX_ROUNDS + 1):
     start = time.time()
     train_entry(entry, rng)
-    eligible, report = is_eligible(entry, n_games=100, first_seed=230_000)
+    eligible, report = is_eligible(entry, n_games=100, first_seed=230_000, timeout_cap=TIMEOUT_CAP)
 
     print(f"round {round_number:>2} | eligible: {eligible} | "
           + "  ".join(f"{k}={v:.2f}" for k, v in report.items()) + f" | {time.time() - start:.0f} s")
@@ -691,12 +702,14 @@ def show_poet(generation, pool, report):
     print(f"gen {generation}: eligible {report['eligible']} | attempts {report['attempts']} | accepted {report['accepted']} "
           f"| picked {report['picked']} | dropped {report['dropped']} | pool {report['pool']}")
     for number, member in enumerate(pool):
-        ok, check = is_eligible(member, n_games=100, first_seed=230_000)
+        ok, check = is_eligible(member, n_games=100, first_seed=230_000, timeout_cap=TIMEOUT_CAP)
         print(f"   entry {number}: eligible {ok} | " + "  ".join(f"{k}={v:.2f}" for k, v in check.items()))
 
-pool, history = run_poet(
-    [entry], mutation_config, n_generations=5, max_pool=5, n_children=3, max_new=2,
-    n_games=100, first_seed=230_000, mutation_seed=1000, train_seed=0, on_generation=show_poet)
+# Disabled on the server: it trains `entry` in place (the full run below would start from it, the same
+# for every SEED) and ignores SEED. Enable it only for a local look.
+# pool, history = run_poet(
+#     [entry], mutation_config, n_generations=5, max_pool=5, n_children=3, max_new=2,
+#     n_games=100, first_seed=230_000, mutation_seed=1000, train_seed=0, on_generation=show_poet)
 
 ###############################################################################
 # Piece: transfer (append this to pipeline_v2.py, after the NEAT learner block)
@@ -837,14 +850,28 @@ latest = {}
 def show_and_keep(generation, pool, report):
     show_with_transfer(generation, pool, report)
     latest["pool"], latest["generation"] = list(pool), generation
+    
+    tmp = f"pool_{RUN}.pkl.tmp"                      # write, then rename: a stop mid-write keeps the old file
+    with open(tmp, "wb") as f:
+        pickle.dump({"pool": latest["pool"], "generation": latest["generation"]}, f)
+    os.replace(tmp, f"pool_{RUN}.pkl")
+    
     for number, member in enumerate(pool):
-        ok, check = is_eligible(member, n_games=100, first_seed=230_000)
+        ok, check = is_eligible(member, n_games=100, first_seed=230_000, timeout_cap=TIMEOUT_CAP)
         print(f"   entry {number}: eligible {ok} | " + "  ".join(f"{k}={v:.2f}" for k, v in check.items()))
 
 pool, history = run_poet(
     [entry], mutation_config, n_generations=10, max_pool=5, n_children=3, max_new=2,
-    n_games=100, first_seed=230_000, mutation_seed=1000, train_seed=0, on_generation=show_and_keep,
-    n_transfer=2, n_transfer_games=100, transfer_margin=0.1)
+    n_games=100, first_seed=230_000, mutation_seed=1000 + SEED, train_seed=SEED, 
+    on_generation=show_and_keep,
+    n_transfer=N_TRANSFER, timeout_cap=TIMEOUT_CAP, n_transfer_games=100, transfer_margin=0.1)
+
+with open(f"history_{RUN}.pkl", "wb") as f:
+    pickle.dump(history, f)
+print("run finished:", RUN, "| generations:", len(history), "| pool:", len(pool))
+
+if not EVALUATE:
+    raise SystemExit("evaluation skipped (EVALUATE = False)")
 
 ###############################################################################
 # 2) Watch game
@@ -863,7 +890,7 @@ def watch_entry(entry, seed, delay=0.15):
     
 entry_to_watch = latest["pool"][0]
 print(outcomes_by_role(entry_to_watch, 600_000))
-watch_entry(entry_to_watch, random.choice(range(600_000,700_000)) )
+# watch_entry(entry_to_watch, random.choice(range(600_000,700_000)))      # local session only
 
 ###############################################################################
 # Evaluation
@@ -1010,9 +1037,7 @@ pressure_report(HeuristicAgent(), "a heuristic player")
 # Run the three parts one after the other, in this order. Total: about 7 minutes.
 
 # 0) Save the pool (overwrites the previous file)
-import pickle
-with open("pool_after_fixes.pkl", "wb") as f:
-    pickle.dump({"pool": latest["pool"], "generation": latest["generation"]}, f)
+# (the pool is already saved as pool_{RUN}.pkl after every generation)
 
 # PART A + B: numbers for three enemies, then two watched games (1 minute + the games)
 GOAL_CODE = 5                       # the cell value of the goal in an observation grid
@@ -1074,9 +1099,10 @@ for name, enemy in enemies_to_look_at.items():
 caught = [r["seed"] for r in behaviour["heuristic enemy"] if r["outcome"] == "Caught"]
 seed = caught[0] if caught else BEHAVIOUR_SEEDS[0]
 
-for name in ("heuristic enemy", "learned enemy (entry 1)"):
-    print(f"\n--- {name} | seed {seed} ---")
-    watch_game(layout, seed, {"player": weaker_player.clone(), "enemy_0": enemies_to_look_at[name].clone()}, delay=0.3)
+# local session only:
+# for name in ("heuristic enemy", "learned enemy (entry 1)"):
+#     print(f"\n--- {name} | seed {seed} ---")
+#     watch_game(layout, seed, {"player": weaker_player.clone(), "enemy_0": enemies_to_look_at[name].clone()}, delay=0.3)
 
 
 ###############################################################################
@@ -1125,3 +1151,42 @@ outcomes_report(weaker_player, "the weaker learned player (pool entry 0)")
 #  - caught + timeout + trapped + goal = 1 on each line. The old "pressure" was the first three added.
 #  - If the pool enemies catch clearly more than the untrained one on the layouts they never saw,
 #    they learned to hunt, and the heuristic's lead in the pressure table was stalling.
+
+###############################################################################
+# DDQN learner, piece 1: time one small train() and look at the rewards
+###############################################################################
+
+import torch
+from agents.ddqn_agent.agent import DdqnAgent, build_mlp
+from experiments.poet.ddqn_learner import DdqnLearner
+
+def new_ddqn_learner(role, seed, games_per_call):
+    torch.manual_seed(seed)                       # the weights of the network
+    agent = DdqnAgent(build_mlp(), epsilon=1.0, epsilon_min=0.05, epsilon_decay=0.9999,
+                      eval_epsilon=0.05, seed=seed)
+    return DdqnLearner(role, agent, games_per_call=games_per_call)
+
+# 1) The player trains 20 games against a heuristic enemy (the engine moves nobody else)
+player_ddqn = new_ddqn_learner("player", seed=1, games_per_call=20)
+
+start = time.time()
+player_ddqn.train(layout, HeuristicAgent(), random.Random(0))
+seconds = time.time() - start
+print(f"player: 20 games in {seconds:.1f} s = {seconds / 20:.2f} s per game")
+print("   history:", player_ddqn.history[-1])
+
+# 2) The enemy trains 20 games against the player as it is now
+enemy_ddqn = new_ddqn_learner("enemy_0", seed=2, games_per_call=20)
+
+start = time.time()
+enemy_ddqn.train(layout, player_ddqn.agent(), random.Random(0))
+seconds = time.time() - start
+print(f"enemy : 20 games in {seconds:.1f} s = {seconds / 20:.2f} s per game")
+print("   history:", enemy_ddqn.history[-1])
+
+# 3) What did each role get paid? One count per reward value over everything stored
+for name, learner in (("player", player_ddqn), ("enemy ", enemy_ddqn)):
+    buffer = learner._agent.replay_buffer
+    rewards = buffer.sample(len(buffer), np.random.default_rng(0))[2]
+    print(f"{name} rewards stored: {len(buffer)} steps |",
+          dict(Counter(np.round(rewards, 3).tolist()).most_common(6)))
