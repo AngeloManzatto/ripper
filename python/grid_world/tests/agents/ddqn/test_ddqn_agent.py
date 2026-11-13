@@ -70,9 +70,18 @@ def prefers(index, n_actions=N_ACTIONS):
     return FixedQ(q)
 
 
+class Opaque(SimpleNamespace):
+    """Like the engine's EntityObservation: it can be read but neither copied nor pickled."""
+    def __deepcopy__(self, memo):
+        raise TypeError("cannot deepcopy 'EntityObservation' object")
+
+    def __reduce_ex__(self, protocol):
+        raise TypeError("cannot pickle 'EntityObservation' object")
+
+
 def make_obs(position=(2, 2), size=5, kind="player"):
     grid = [[FLOOR] * size for _ in range(size)]
-    return SimpleNamespace(grid=grid, position=position, kind=kind, status="Alive", id=0)
+    return Opaque(grid=grid, position=position, kind=kind, status="Alive", id=0)
 
 
 def raises(exc, fn, *args, **kwargs):
@@ -294,6 +303,20 @@ def test_the_agent_survives_pickle():
     agent = DdqnAgent(build_mlp(), epsilon=0.5, seed=4)
     other = pickle.loads(pickle.dumps(agent))
     assert actions_taken(agent, 40) == actions_taken(other, 40)
+
+
+def test_an_agent_that_has_played_can_be_cloned():
+    # Its history holds engine observations that cannot be copied: clone() builds a new agent
+    agent = small_agent()
+    for k in range(6):
+        play_step(agent, k % 4)
+    agent.act(make_obs())                                       # an episode in progress
+    assert len(agent.history) >= 1 and agent.positions
+
+    other = agent.clone()
+    assert len(other.history) == 0 and other.positions == [] and other.actions == []
+    assert other.history.maxlen == agent.history.maxlen
+    assert all(torch.equal(p, q) for p, q in zip(agent.policy_net.parameters(), other.policy_net.parameters()))
 
 
 def test_on_transition_does_nothing_in_eval_mode():
@@ -593,6 +616,7 @@ def test_pickle_keeps_the_learning_state():
     agent = small_agent()
     for i in range(12):
         play_step(agent, i % 4)
+    agent.reset()                         # between episodes: a played agent holds engine observations
     other = pickle.loads(pickle.dumps(agent))
     assert len(other.replay_buffer) == 12 and other.learn_steps == agent.learn_steps
     play_step(agent, 1)

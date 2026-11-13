@@ -1,17 +1,17 @@
 """
-Created on Wed Nov 11 10:35:42 2026
+Created on Wed Nov 11 09:45:00 2026
 
 @author: Angelo Antonio Manzatto
-"""
 
-"""The DDQN learner: one role (player or enemy) that POET can train, with a DdqnAgent inside.
+The DDQN learner: one role (player or enemy) that POET can train, with a DdqnAgent inside.
 
 POET only sees agent(), train() and clone() (poet.learner.Learner). Everything DDQN stays here: how
 many games one train() call plays, which seeds they use, and the rule that the agent which learns is
 never the one that plays for POET.
 
-    agent()  a FROZEN copy of the learning agent (eval mode, no learning, empty replay buffer).
-             POET plays, measures and compares with it; nothing it does reaches the learner.
+    agent()  a NEW FROZEN copy of the learning agent on every call (eval mode, no learning, empty
+             replay buffer), as NeatLearner builds a new agent on every call. POET plays, measures
+             and compares with it; nothing it does reaches the learner, and the learner keeps none.
     train()  the learning agent plays games_per_call games on the layout against a frozen clone of
              the opponent, and learns from them as it plays (DdqnAgent.on_transition).
     clone()  an independent learner: the networks are copied, the optimizer and the replay buffer
@@ -19,6 +19,7 @@ never the one that plays for POET.
 
 The reward each agent learns from is the agent's own reward_fn: build the player's agent with a
 reward that pays for reaching the goal and the enemy's with one that pays for catching.
+
 """
 
 ###############################################################################
@@ -71,59 +72,60 @@ class DdqnLearner:
         self.seed_span = seed_span
 
         self._agent = agent
-        self._playing = None        # the frozen copy handed out by agent(); rebuilt after training
         self.games_played = 0
         self.history = []
 
     def agent(self):
-        """A frozen copy of the learning agent: eval mode, no replay buffer, learns nothing.
+        """A new frozen copy of the learning agent: eval mode, no replay buffer, learns nothing.
 
-        The same object until the next train() call. Playing with it never changes the learner.
+        Playing with it never changes the learner, and the learner keeps no reference to it.
         """
-        if self._playing is None:
-            playing = self._agent.clone()
-            playing.set_eval_mode()
-            self._playing = playing
-        return self._playing
+        playing = self._agent.clone()
+        playing.set_eval_mode()
+        return playing
 
     def train(self, layout, opponent, rng):
         """Play games_per_call games on this layout against `opponent`, learning as the agent plays.
 
         `rng` (a random.Random) is the only source of randomness: it reseeds the agent's own
         generator (exploration and batches) at the start of the call. The opponent is played against
-        as a frozen clone and is not changed. When anything fails halfway the learner stays exactly
-        as it was. Returns None.
+        as a frozen clone and is not changed. Training happens in place: when the engine fails
+        halfway, what the agent learned until then stays (games_played and history do not advance),
+        and the agent holds no observation of the engine, so the learner can still be trained,
+        cloned and pickled. Returns None.
         """
         opponent = opponent.clone()
         opponent.set_eval_mode()
 
-        # Work on a copy and commit at the end: a failure halfway leaves the learner untouched
-        work = copy.deepcopy(self._agent)
-        work.set_train_mode()
-        work.rng = np.random.default_rng(rng.getrandbits(64))
+        agent = self._agent
+        agent.set_train_mode()
+        agent.rng = np.random.default_rng(rng.getrandbits(64))
 
-        agents = {self.role: work, OPPONENT_OF[self.role]: opponent}
+        agents = {self.role: agent, OPPONENT_OF[self.role]: opponent}
 
         outcomes, played, remaining = [], self.games_played, self.games_per_call
-        while remaining > 0:
-            offset = played % self.seed_span
-            chunk = min(remaining, self.seed_span - offset)       # never past the last seed of the span
+        try:
+            while remaining > 0:
+                offset = played % self.seed_span
+                chunk = min(remaining, self.seed_span - offset)       # never past the last seed of the span
 
-            result = play_games(layout, agents, n_games=chunk, first_seed=self.train_seed + offset)
-            outcomes += result[self.role]
-            played += chunk
-            remaining -= chunk
+                result = play_games(layout, agents, n_games=chunk, first_seed=self.train_seed + offset)
+                outcomes += result[self.role]
+                played += chunk
+                remaining -= chunk
+        finally:
+            # The games leave the last episode in the agent (observations of the engine, which cannot
+            # be copied or pickled): clear it, also when the games failed
+            agent.reset()
 
-        self._agent = work
-        self._playing = None
         self.games_played = played
         self.history = self.history + [{
             "call": len(self.history) + 1,
             "games": self.games_per_call,
             "goal_rate": goal_rate(outcomes),
-            "epsilon": work.epsilon,
-            "learn_steps": work.learn_steps,
-            "loss": work.last_loss,
+            "epsilon": agent.epsilon,
+            "learn_steps": agent.learn_steps,
+            "loss": agent.last_loss,
         }]
 
     def clone(self):

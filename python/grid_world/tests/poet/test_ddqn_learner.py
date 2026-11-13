@@ -1,7 +1,7 @@
 """
-Created on Wed Nov 11 11:18:24 2026
+Created on Wed Nov 11 21:55:56 2026
 
-@author: Angelo Antonio Manzatto
+@author: root
 """
 
 """Tests of experiments/poet/ddqn_learner.py.
@@ -15,16 +15,19 @@ engine and are skipped when it cannot be imported.
 
 DdqnLearner(role, agent, games_per_call=500, train_seed=200_000, seed_span=10_000)
 
-    - agent() is a frozen copy of the learning agent: eval mode, empty replay buffer. It is the same
-      object until the next train() call. Playing with it never changes the learner.
+    - agent() is a NEW frozen copy of the learning agent on every call: eval mode, empty replay buffer.
+      Playing with it never changes the learner, which keeps none of them.
     - train(layout, opponent, rng) plays games_per_call games with the learning agent (train mode)
       against a frozen clone of the opponent, on seeds train_seed + (games_played mod seed_span) ...
-      in order, never past the span. rng is the only source of randomness. A failure halfway leaves
-      the learner untouched.
+      in order, never past the span. rng is the only source of randomness. Training is in place:
+      a failure halfway keeps what was learned, but games_played and history do not advance, and the
+      agent holds no engine observation (the learner can be trained, cloned and pickled again).
     - clone() is independent: same networks, fresh optimizer and buffer, same games_played and history.
 """
 
 import copy
+import importlib
+import pickle
 import random
 import sys
 import traceback
@@ -36,6 +39,7 @@ import torch
 
 from experiments.poet import ddqn_learner
 
+importlib.reload(ddqn_learner)     # pick up edits without restarting the console
 from agents.ddqn_agent.agent import DdqnAgent, build_mlp
 from agents.features.grid import FREE as FLOOR
 from core.actions import ACTIONS
@@ -73,9 +77,18 @@ def patched(module, **replacements):
 # Stand-ins: scripted games that the real agent learns from
 ###############################################################################
 
+class Opaque(SimpleNamespace):
+    """Like the engine's EntityObservation: it can be read but neither copied nor pickled."""
+    def __deepcopy__(self, memo):
+        raise TypeError("cannot deepcopy 'EntityObservation' object")
+
+    def __reduce_ex__(self, protocol):
+        raise TypeError("cannot pickle 'EntityObservation' object")
+
+
 def make_obs(position=(2, 2), size=5):
     grid = [[FLOOR] * size for _ in range(size)]
-    return SimpleNamespace(grid=grid, position=position, kind="player", status="Alive", id=0)
+    return Opaque(grid=grid, position=position, kind="player", status="Alive", id=0)
 
 
 class Reward:
@@ -143,6 +156,20 @@ def games(fail_after=None):
         yield calls
 
 
+@contextmanager
+def base_agent_without_pickle_support():
+    """The BaseAgent of some versions has no __getstate__ / __setstate__: the DDQN code must not need them."""
+    from agents.base_agent import BaseAgent
+    saved = {n: BaseAgent.__dict__[n] for n in ("__getstate__", "__setstate__") if n in BaseAgent.__dict__}
+    try:
+        for name in saved:
+            delattr(BaseAgent, name)
+        yield
+    finally:
+        for name, value in saved.items():
+            setattr(BaseAgent, name, value)
+
+
 def weights(agent):
     return [p.detach().clone() for p in agent.policy_net.parameters()]
 
@@ -185,13 +212,21 @@ def test_agent_is_a_frozen_copy_not_the_learning_agent():
     assert same_weights(playing, learner._agent)
 
 
-def test_agent_is_the_same_object_until_the_next_training():
+def test_every_call_gives_a_new_frozen_agent_and_the_learner_keeps_none():
     learner = new_learner()
-    assert learner.agent() is learner.agent()
+    first, second = learner.agent(), learner.agent()
+    assert first is not second and first is not learner._agent and second is not learner._agent
+    assert same_weights(first, second)
+    assert not any(value is first or value is second for value in vars(learner).values())
+
+
+def test_a_new_agent_after_training_has_the_new_weights():
+    learner = new_learner()
     before = learner.agent()
     with games():
         learner.train("layout", Opponent(), random.Random(0))
-    assert learner.agent() is not before and learner.agent() is learner.agent()
+    after = learner.agent()
+    assert not same_weights(before, after) and same_weights(after, learner._agent)
 
 
 def test_playing_with_the_agent_never_changes_the_learner():
@@ -320,21 +355,25 @@ def test_randomness_comes_from_rng_only():
     assert not same_weights(a, c)
 
 
-def test_a_failure_halfway_leaves_the_learner_untouched():
+def test_a_failure_halfway_keeps_the_count_and_leaves_a_learner_that_can_go_on():
     learner = new_learner(games_per_call=20)
     with games():
         learner.train("layout", Opponent(), random.Random(0))
-    agent, playing = learner._agent, learner.agent()
-    snapshot = (weights(agent), len(agent.replay_buffer), agent.learn_steps, agent.epsilon,
-                learner.games_played, copy.deepcopy(learner.history))
+    agent = learner._agent
+    count, history = learner.games_played, copy.deepcopy(learner.history)
 
     with games(fail_after=7):
         with raises(RuntimeError):
             learner.train("layout", Opponent(), random.Random(1))
 
-    assert learner._agent is agent and learner.agent() is playing
-    assert all(torch.equal(a, b) for a, b in zip(snapshot[0], weights(agent)))
-    assert (len(agent.replay_buffer), agent.learn_steps, agent.epsilon, learner.games_played, learner.history) == snapshot[1:]
+    assert learner._agent is agent
+    assert learner.games_played == count and learner.history == history       # nothing advanced
+    assert len(agent.history) == 0 and agent.positions == [] and agent.actions == []   # holds no observation
+    assert pickle.loads(pickle.dumps(learner)).games_played == count
+    assert learner.clone().games_played == count
+    with games():
+        learner.train("layout", Opponent(), random.Random(2))                  # and it trains again
+    assert learner.games_played == count + 20
 
 ###############################################################################
 # clone()
@@ -371,6 +410,63 @@ def test_training_the_clone_never_changes_the_original_and_the_other_way_round()
         learner.train("layout", Opponent(), random.Random(2))
     assert all(torch.equal(a, b) for a, b in zip(twin_weights, weights(twin._agent)))
     assert twin.games_played == 40 and len(twin.history) == 2
+
+###############################################################################
+# Engine observations cannot be copied or pickled: the learner must hold none
+###############################################################################
+
+def test_a_learner_can_train_again_after_training():
+    learner = new_learner(games_per_call=6)
+    with games():
+        learner.train("layout", Opponent(), random.Random(0))
+        learner.train("layout", Opponent(), random.Random(1))       # copies the agent that just played
+    assert learner.games_played == 12
+
+
+def test_a_trained_learner_can_be_pickled_and_deep_copied():
+    learner = new_learner()
+    with games():
+        learner.train("layout", Opponent(), random.Random(0))
+    again = pickle.loads(pickle.dumps(learner))
+    assert again.games_played == 6 and same_weights(again._agent, learner._agent)
+    assert copy.deepcopy(learner).games_played == 6
+
+
+def test_a_learner_can_be_pickled_and_cloned_after_agents_played_for_POET():
+    learner = new_learner()
+    with games():
+        learner.train("layout", Opponent(), random.Random(0))
+    playing = learner.agent()
+    for k in range(5):                                              # what POET does: play with it
+        playing.reset()
+        playing.act(make_obs(position=(1 + k % 3, 1)))
+    assert len(playing.history) == 1                                # it holds an observation now
+
+    again = pickle.loads(pickle.dumps(learner))
+    assert again.games_played == 6 and same_weights(again.agent(), learner.agent())
+    assert learner.clone().games_played == 6
+
+
+def test_all_of_it_also_works_with_a_base_agent_that_has_no_pickle_support():
+    with base_agent_without_pickle_support():
+        learner = new_learner(games_per_call=6)
+        with games():
+            learner.train("layout", Opponent(), random.Random(0))
+            learner.train("layout", Opponent(), random.Random(1))
+        playing = learner.agent()
+        playing.reset()
+        playing.act(make_obs())
+        assert pickle.loads(pickle.dumps(learner)).games_played == 12
+        assert copy.deepcopy(learner).games_played == 12
+        assert learner.clone().games_played == 12
+
+
+def test_the_learning_agent_holds_no_observation_after_training():
+    learner = new_learner()
+    with games():
+        learner.train("layout", Opponent(), random.Random(0))
+    agent = learner._agent
+    assert len(agent.history) == 0 and agent.positions == [] and agent.actions == []
 
 ###############################################################################
 # The real engine (skipped when it cannot be imported)
@@ -436,6 +532,20 @@ def test_real_a_played_learner_can_still_be_cloned_and_trained():
     twin.train(layout, Heuristic(), random.Random(1))
     assert twin.games_played == 6 and learner.games_played == 3
 
+def test_real_the_same_learner_trains_twice_and_can_be_pickled_after_playing():
+    # The error seen with the real engine: the agent kept the observations of its last game
+    layout, Heuristic, play_games = _real()
+
+    learner = _real_learner()
+    learner.train(layout, Heuristic(), random.Random(0))
+    learner.train(layout, Heuristic(), random.Random(1))                 # copies the agent that just played
+    play_games(layout, {"player": learner.agent(), "enemy_0": Heuristic()}, n_games=2, first_seed=230_000)
+
+    again = pickle.loads(pickle.dumps(learner))
+    assert again.games_played == 6 and same_weights(again._agent, learner._agent)
+    assert copy.deepcopy(learner).games_played == 6
+    assert learner.clone().games_played == 6
+
 ###############################################################################
 # Runner
 ###############################################################################
@@ -443,7 +553,7 @@ def test_real_a_played_learner_can_still_be_cloned_and_trained():
 def run_all():
     # Only the tests defined in THIS file: a console that stays open still holds the tests of earlier runs
     tests = [(name, test) for name, test in globals().items()
-             if name.startswith("test_") and callable(test)]
+             if name.startswith("test_") and callable(test) and test.__code__.co_filename == __file__]
     passed, skipped, failed = 0, 0, []
 
     for name, test in tests:
