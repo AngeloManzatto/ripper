@@ -30,9 +30,10 @@ pub fn find_connected_regions(
                 continue;
             }
 
-            // pos is unvisited and walkable — flood-fill the whole component from here
+            // pos is unvisited and walkable - flood-fill the whole component from here
             let mut component = Vec::new();
             let mut frontier = VecDeque::new();
+
             frontier.push_back(pos);
             visited.insert(pos);
 

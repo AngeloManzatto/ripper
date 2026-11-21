@@ -9,3 +9,4 @@ pub mod render;
 pub mod reposition;
 pub mod rules;
 pub mod state;
+pub mod tests;

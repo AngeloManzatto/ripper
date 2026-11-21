@@ -1,0 +1,9 @@
+{
+  "format_version": 1,
+  "id": "base:empty",
+  "category": "terrain",
+  "description": "Open ground. Anything can walk on it and see across it.",
+  "glyph": ".",
+  "walkable": true,
+  "transparent": true
+}

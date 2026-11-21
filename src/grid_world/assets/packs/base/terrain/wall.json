@@ -1,0 +1,9 @@
+{
+  "format_version": 1,
+  "id": "base:wall",
+  "category": "terrain",
+  "description": "Solid. Nothing can walk through it or see through it.",
+  "glyph": "#",
+  "walkable": false,
+  "transparent": false
+}
