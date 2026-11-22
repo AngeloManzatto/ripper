@@ -4,7 +4,6 @@
 
 use std::path::PathBuf;
 
-use super::super::raw::{RawPack, RawTerrain};
 use super::super::read::{LoadedObject, LoadedPack};
 use super::super::error::PackError;
 use super::super::validate::{
@@ -14,6 +13,7 @@ use super::super::validate::{
     check_name_matches_file,
     check_dependencies_exist,
     check_glyph,
+    check_color,
     check_unique_glyphs,
     validate_object,
     validate_pack,
@@ -22,38 +22,7 @@ use super::super::validate::{
 };
 
 use super::super::validate::{check_terrain_count, MAX_TERRAINS};
-
-//-----------------------------------------------------
-// Helpers
-//-----------------------------------------------------
-
-fn pack(name: &str) -> LoadedPack {
-    LoadedPack {
-        dir: PathBuf::from("packs").join(name),
-        raw: RawPack {
-            format_version: None,
-            name: String::from(name),
-            version: String::from("0.1.0"),
-            description: None,
-            depends_on: Vec::new(),
-        },
-        objects: Vec::new(),
-    }
-}
-
-fn object(id: &str, glyph: Option<&str>, file: &str) -> LoadedObject {
-    LoadedObject {
-        path: PathBuf::from(file),
-        terrain: RawTerrain {
-            format_version: None,
-            id: String::from(id),
-            description: None,
-            glyph: glyph.map(String::from),
-            walkable: true,
-            transparent: true,
-        },
-    }
-}
+use super::fixture::{object, pack};
 
 //-----------------------------------------------------
 // Checkers
@@ -698,4 +667,75 @@ fn the_limit_of_terrains_is_enforced() {
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0].path, root);
     assert!(errors[0].message.contains("too many terrains"));
+}
+
+fn check_color_text(field: &str, text: &str) -> Vec<PackError> {
+    let mut errors = Vec::new();
+    check_color(field, text, &PathBuf::from("wall.json"), &mut errors);
+    errors
+}
+
+#[test]
+fn a_good_color_is_fine() {
+    assert!(check_color_text("fg_color", "#c8a050").is_empty());
+}
+
+#[test]
+fn upper_case_digits_are_fine() {
+    assert!(check_color_text("bg_color", "#C8A050").is_empty());
+}
+
+#[test]
+fn a_color_name_is_not_a_color() {
+    assert_eq!(check_color_text("fg_color", "red").len(), 1);
+}
+
+#[test]
+fn the_short_form_is_refused() {
+    assert_eq!(check_color_text("fg_color", "#fff").len(), 1);
+}
+
+#[test]
+fn a_missing_hash_is_refused() {
+    assert_eq!(check_color_text("fg_color", "c8a050").len(), 1);
+}
+
+#[test]
+fn a_digit_that_is_not_hex_is_refused() {
+    assert_eq!(check_color_text("fg_color", "#gg0000").len(), 1);
+}
+
+#[test]
+fn an_empty_text_is_refused() {
+    assert_eq!(check_color_text("bg_color", "").len(), 1);
+}
+
+#[test]
+fn wide_letters_are_refused_without_crashing() {
+    assert_eq!(check_color_text("fg_color", "#aéaaa").len(), 1);
+}
+
+#[test]
+fn the_message_names_the_field_and_the_text() {
+    let errors = check_color_text("bg_color", "red");
+
+    assert!(errors[0].message.contains("bg_color"));
+    assert!(errors[0].message.contains("\"red\""));
+}
+
+#[test]
+fn the_color_error_points_at_the_file() {
+    assert_eq!(check_color_text("fg_color", "red")[0].path, PathBuf::from("wall.json"));
+}
+
+#[test]
+fn bad_colors_are_reported_through_validate_object() {
+    let mut errors = Vec::new();
+    let mut broken = object("base:wall", Some("#"), "packs/base/terrain/wall.json");
+    broken.terrain.fg_color = String::from("red");
+    broken.terrain.bg_color = String::from("#12");
+
+    validate_object(&pack("base"), &broken, &mut errors);
+
+    assert_eq!(errors.len(), 2);
 }

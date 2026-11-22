@@ -4,6 +4,8 @@
   "category": "terrain",
   "description": "Solid. Nothing can walk through it or see through it.",
   "glyph": "#",
+  "fg_color": "#c8c8c8",
+  "bg_color": "#303030",  
   "walkable": false,
   "transparent": false
 }

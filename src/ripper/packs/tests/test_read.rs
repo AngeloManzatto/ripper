@@ -2,6 +2,11 @@
 // Tests
 //-----------------------------------------------------
 
+use std::fs;
+use std::path::PathBuf;
+
+use super::fixture::{WALL, EMPTY, PACK};
+
 use super::super::read::{
     read_object, 
     read_pack, 
@@ -12,16 +17,6 @@ use super::super::read::{
     load_all_packs
 };
 use super::super::raw::RawObject;
-use std::fs;
-use std::path::PathBuf;
-
-//-----------------------------------------------------
-// Constants
-//-----------------------------------------------------
-
-const WALL : &str = r##"{"category":"terrain","id":"base:wall","glyph":"#","walkable":false,"transparent":false}"##;
-const EMPTY: &str = r##"{"category":"terrain","id":"base:empty","glyph":".","walkable":true,"transparent":true}"##;
-const PACK : &str = r#"{"name":"base","version":"0.1.0"}"#;
 
 //-----------------------------------------------------
 // Tests
@@ -42,9 +37,10 @@ fn write_temp(name: &str, content: &str) -> PathBuf {
 
 #[test]
 fn a_valid_file_is_read() {
+
     let path = write_temp(
         "ripper_read_valid.json",
-        r##"{"category":"terrain","id":"base:wall","glyph":"#","walkable":false,"transparent":false}"##,
+        WALL,
     );
 
     let object = read_object(&path).unwrap();

@@ -1,8 +1,8 @@
 //! Packs: loading game content from disk.
 //!
-//! Entry point: `load_registry` (see load_registry.rs).
+//! Entry point: `load_content` (see load_content.rs).
 //! Steps, in order: read.rs (files → raw.rs shapes), validate.rs (rules),
-//! build.rs (raw → definitions), then Registry::new.
+//! build.rs (raw → definitions), then Content::new.
 //! May use: core, content. Must never be used by: world, rules, render.
 //! Errors are collected, never silently skipped (error.rs).
 

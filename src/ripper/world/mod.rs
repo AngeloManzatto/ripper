@@ -1,4 +1,4 @@
-//! World: a level in memory, built from text and the registry.
+//! World: a level in memory, built from text and the content.
 //!
 //! May use: core, content. Must never use: packs (only startup code does).
 

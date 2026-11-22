@@ -9,6 +9,8 @@ use super::error::PackError;
 use super::read::{LoadedObject, LoadedPack};
 use super::SUPPORTED_FORMAT_VERSION;
 
+use crate::ripper::core::color::Color;
+
 //-----------------------------------------------------
 // Constants
 //-----------------------------------------------------
@@ -123,6 +125,19 @@ pub fn check_unique_glyphs(packs: &[LoadedPack], errors: &mut Vec<PackError>) {
 }
 
 //-----------------------------------------------------
+// Check color
+//-----------------------------------------------------
+
+pub fn check_color(field: &str, text: &str, path: &Path, errors: &mut Vec<PackError>) {
+    if Color::from_hex(text).is_none() {
+        errors.push(PackError::new(
+            path.to_path_buf(),
+            format!("{field} {text:?} must look like `#rrggbb` (a # and six hex digits)"),
+        ));
+    }
+}
+
+//-----------------------------------------------------
 // Check name characters
 //-----------------------------------------------------
 
@@ -184,6 +199,8 @@ pub fn validate_object(
 
     check_format_version(terrain.format_version, &object.path, errors);
     check_glyph(&terrain.glyph, &object.path, errors);
+    check_color("fg_color", &terrain.fg_color, &object.path, errors);
+    check_color("bg_color", &terrain.bg_color, &object.path, errors);
     check_id(&terrain.id, &pack.raw.name, &object.path, errors);
 
     if let Some((_prefix, name)) = split_id(&terrain.id) {

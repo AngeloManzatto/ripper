@@ -3,5 +3,5 @@
 //-----------------------------------------------------
 
 pub mod grid;
-
+pub mod color;
 pub mod tests;

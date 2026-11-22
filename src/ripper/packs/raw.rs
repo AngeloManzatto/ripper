@@ -30,6 +30,8 @@ pub struct RawTerrain {
     pub id: String,
     pub description: Option<String>,
     pub glyph: Option<String>,
+    pub fg_color: String,
+    pub bg_color: String,
     pub walkable: bool,
     pub transparent: bool,
 }

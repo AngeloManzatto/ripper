@@ -38,12 +38,16 @@ A living list of the ideas for where the engine and the research can go. It is m
 
 | Piece | State | Unlocks |
 |-------|-------|---------|
-| Definitions loader (packs, JSON, validator, `Registry`) | done, tested, shipped `base` pack loads | I-03, I-05 |
+| Packs loader (`packs/`: JSON, validator, `load_content`) | done, tested, shipped `base` pack loads | I-03, I-05 |
+| `Content` (`content/`: `Table<D>`, `TerrainDef`, `TerrainId`, glyph lookup) | done, tested | I-03, I-05 |
 | `Grid<T>` (generic 2-D container) | done (`get`, `get_mut`) | I-04, rendering |
-| Glyph lookup in the registry | next | building terrain from text |
-| `World` built from the registry (terrain grid, trap and goal bridged) | planned | every idea |
-| Rendering from definitions | planned (the visible goal) | I-01, I-02 |
-| Entity definitions (player, enemy, trap, goal, door, key) | planned | I-02, I-03, I-05 |
+| Layout reader (`parse_layout`: text to `Grid<TerrainId>`, all errors reported) | done, tested | rendering, generation |
+| `Level` (one floor: terrain grid plus a shared `Arc<Content>`) | done, tested | every idea |
+| Terminal drawing (`draw_terrain`) and `examples/show_level` | done: first picture on screen | I-01, I-02 |
+| Colour in the pack data (`Color`, hex strings, `fg`/`bg` on terrain) and a `Frame` of cells | building (step 1: `Color`) | rendering, I-02 |
+| Changing a level (`set_terrain`, stamping rooms) | not started | generation |
+| Generation plus reachability check (terrain only first) | not started | I-03, I-04 |
+| Entity definitions (player, enemy, trap, goal, door, key) | planned, no bridge | I-02, I-03, I-05 |
 | Events (picked up, stepped on, killed) | not started | I-05, I-07 |
 | Single-region and reachability-with-keys rule | not started | I-03, I-05 |
 
@@ -86,6 +90,8 @@ A living list of the ideas for where the engine and the research can go. It is m
 - An experiment that isolates the idea: **permute the glyph-to-meaning mapping in every level** (the per-level palette makes this almost free). The agent can no longer memorise "`#` means wall" and has to learn meaning from interaction. A control run with fixed glyphs shows the cost.
 - A second experiment: symbols whose *shape* carries information, for example a key and a door with matching shapes.
 - Rendering must support a footprint as one thing (select, colour, move together).
+- **Transparent pixels (2026-11-22).** A frame cell is always opaque (glyph, foreground, background), but what an entity *paints* can leave each channel unset, so whatever is underneath shows. A footprint of 2×2 with two green cells, one blue and one transparent is then four drawing cells, one with nothing set. A goblin on grass sets glyph and foreground and leaves the background unset. In the pack JSON, `null` could mean "unset". Compositing is per channel: a set value overwrites, an unset one is skipped. The frame stays simple and the entities carry the transparency.
+- **Colour as symbol (2026-11-22).** Free RGB is fine to start, but ARC-style frames use a small palette of indexed colours. A palette layer (names mapped to RGB, possibly permuted per level, like the glyph experiment) can sit on top of RGB later.
 
 **Needs from the engine.** Footprints in entity definitions; collision and line of sight for multi-cell entities; a rendering path.
 
@@ -297,7 +303,7 @@ A living list of the ideas for where the engine and the research can go. It is m
 **Dependency picture (rough)**
 
 ```
-definitions loader (done) ──► World from registry ──► rendering ──► I-01, I-02
+packs + Content (done) ──► Level (done) ──► terminal drawing (done) ──► I-01, I-02
         │                          │
         │                          └──► entity definitions ──► events ──► I-05 ──► I-07
         │                                       │                              ▲
@@ -305,6 +311,26 @@ definitions loader (done) ──► World from registry ──► rendering ─�
                                                                   I-06 (Rust brains)
 Grid<T> (done) ──► I-04 (large worlds)
 ```
+
+**Engine map (decided 2026-11-21).** One crate, layers as folders, dependencies pointing only downward:
+
+```
+src/ripper/
+  core/        knows nothing: grid.rs
+  content/     what the engine knows about the game's stuff: Content, Table, TerrainDef, TerrainId
+  packs/       loading from disk: raw, read, validate, build, load_content (the one public door)
+  world/       layout.rs (text to terrain grid), level.rs (one floor)
+  render/      terminal.rs (glyph pictures); later a Frame of cells and other outputs
+  assets/packs/base/...
+```
+
+Vocabulary: *Pack* (folder on disk), *Raw* (file shape), *Def* (checked definition), *Id* (number inside its table), *Table* (all defs of one kind), *Content* (the bundle of tables). The old `grid_world` is being replaced beside the new code and will be deleted when nothing depends on it.
+
+**Decisions behind the map**
+- No global singleton. `Content` is built once, wrapped in an `Arc`, and every `Level` owns a handle, so tests and experiments can use different content in the same process.
+- Content is read-only during a run. New content (for example from the Dungeon Master, I-03) arrives as a new pack loaded for the *next* episode; a level never mixes two contents.
+- The per-property accessors stay off `Content`: it answers "which one?" and the definition answers "what is it like?".
+- The temporary bridge for `P`/`E`/`T`/`G` was dropped. Entities arrive as real definitions instead.
 
 **Principles that keep recurring (from decisions already made)**
 - The environment reports what happened; reward is decided in training.
@@ -315,8 +341,13 @@ Grid<T> (done) ──► I-04 (large worlds)
 **Parking lot (smaller thoughts to place later)**
 - A metroidvania-style world of connected W×H grids (far future, chunking in I-04 is the bridge).
 - Can enemies open doors? Is a key an entity or an inventory item?
-- Id stability when packs change (a planned test; a lock file of name → number is one answer).
+- Id stability when packs change. A dependent pack loads after its dependency, so its ids come after. But an unrelated pack that sorts earlier could shift every number; a lock file of name → number is one answer, and saving things by name (not number) is another.
 - Observation channels for the new terrain and entities.
+- Split `parse_layout` in two: shape (text to `Grid<char>`, no content needed) and meaning (glyphs to ids). It makes entity glyphs a small addition, and leaves room for a per-level palette (I-02).
+- A `Frame` of cells (`Grid<Cell>`) with one draw function per kind of thing, and outputs (terminal, image) reading the frame. Worth building when the second layer (entities) has to be drawn over terrain.
+- A generic `draw_grid` taking a closure for the glyph of a cell, if a second kind of grid ever needs drawing.
+- Plotting and charts are a separate module, not part of the terminal output.
+- Reloading content at episode boundaries (a new `Arc<Content>` for new levels), and recording which packs and versions an experiment used.
 - Entities that want things of their own (Rain World style), and entities simulated while nobody is looking.
 
 ---
@@ -341,3 +372,5 @@ Grid<T> (done) ──► I-04 (large worlds)
 - **2026-11-20** — File created from the eight ideas of the walk, plus additions and references.
 - **2026-11-20** — I-07: the reference is Rain World (it had been written down as "Cat World"); added what that kind of ecosystem would ask of the engine.
 - **2026-11-20** — New idea I-09 (a learned generator for entity symbols); I-02 now points to it.
+- **2026-11-21** — Engine reorganized into layers (`core`, `content`, `packs`, `world`, `render`); `Registry` became `Content` with a generic `Table<D>`; first `Level` and first terminal picture. Foundations table and dependency picture updated; engine map and decisions added; the entity bridge dropped; parking lot extended.
+- **2026-11-22** — Colour plan agreed: RGB as hex strings, foreground and background required on terrain, a `Frame` of cells as the common source for terminal, image and Python outputs. I-02 gains transparent pixels and the palette thought.

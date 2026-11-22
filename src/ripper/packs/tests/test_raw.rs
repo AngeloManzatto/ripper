@@ -2,7 +2,7 @@
 // Libraries
 //-----------------------------------------------------
 
-use crate::ripper::packs::raw::{RawPack, RawTerrain, RawObject};
+use super::super::raw::{RawPack, RawTerrain, RawObject};
 
 //-----------------------------------------------------
 // Tests
@@ -11,12 +11,14 @@ use crate::ripper::packs::raw::{RawPack, RawTerrain, RawObject};
 #[test]
 fn reads_a_complete_terrain_file() {
 
-    let text = r##"
+    let text: &str = r##"
     { 
         "format_version": 1, 
         "id": "base:wall", 
         "description": "Solid.", 
-        "glyph": "#", 
+        "glyph": "#",
+        "fg_color":"#c8c8c8",
+        "bg_color":"#303030",
         "walkable": false, 
         "transparent": false 
     }"##;
@@ -31,13 +33,15 @@ fn reads_a_complete_terrain_file() {
 
 #[test]
 fn optional_fields_can_be_left_out() {
-    let text = r#"
+    let text = r##"
     { 
         "id": "base:void", 
-        "walkable": false, 
+        "walkable": false,
+        "fg_color":"#c8c8c8",
+        "bg_color":"#303030",
         "transparent": true 
     }
-    "#;
+    "##;
 
     let terrain: RawTerrain = serde_json::from_str(text).unwrap();
 
@@ -48,7 +52,12 @@ fn optional_fields_can_be_left_out() {
 
 #[test]
 fn a_missing_required_field_is_an_error() {
-    let text = r#"{ "id": "base:wall", "walkable": false }"#;
+    let text = r##"{
+                        "id": "base:wall",
+                        "fg_color":"#c8c8c8",
+                        "bg_color":"#303030",
+                        "walkable": false 
+                        }"##;
 
     let result: Result<RawTerrain, _> = serde_json::from_str(text);
 
@@ -58,7 +67,14 @@ fn a_missing_required_field_is_an_error() {
 
 #[test]
 fn a_field_of_the_wrong_type_is_an_error() {
-    let text = r#"{ "id": "base:wall", "walkable": "no", "transparent": false }"#;
+
+    let text = r##"{ 
+                        "id": "base:wall", 
+                        "walkable": "no",
+                        "fg_color":"#c8c8c8",
+                        "bg_color":"#303030",
+                        "transparent": false 
+                        }"##;
 
     let result: Result<RawTerrain, _> = serde_json::from_str(text);
 
@@ -68,7 +84,14 @@ fn a_field_of_the_wrong_type_is_an_error() {
 
 #[test]
 fn an_unknown_field_is_an_error() {
-    let text = r#"{ "id": "base:wall", "glpyh": "x", "walkable": false, "transparent": false }"#;
+    let text = r##"{ 
+                    "id": "base:wall", 
+                    "glpyh": "x",
+                    "fg_color":"#c8c8c8",
+                    "bg_color":"#303030",
+                    "walkable": false,
+                    "transparent": false 
+                    }"##;
 
     let result: Result<RawTerrain, _> = serde_json::from_str(text);
 
@@ -78,7 +101,17 @@ fn an_unknown_field_is_an_error() {
 
 #[test]
 fn a_terrain_is_recognised_by_its_category() {
-    let text = r##"{ "format_version": 1, "id": "base:wall", "category": "terrain", "description": "Solid.", "glyph": "#", "walkable": false, "transparent": false }"##;
+    let text = r##"{ 
+                        "format_version": 1, 
+                        "id": "base:wall", 
+                        "category": "terrain", 
+                        "description": "Solid.", 
+                        "glyph": "#",
+                        "fg_color":"#c8c8c8",
+                        "bg_color":"#303030",
+                        "walkable": false, 
+                        "transparent": false 
+                        }"##;
 
     let object: RawObject = serde_json::from_str(text).unwrap();
 
@@ -89,7 +122,14 @@ fn a_terrain_is_recognised_by_its_category() {
 
 #[test]
 fn an_unknown_category_is_an_error() {
-    let text = r#"{ "id": "base:rat", "category": "entity", "glyph": "r" }"#;
+
+    let text = r##"{ 
+                        "id": "base:rat", 
+                        "category": "entity", 
+                        "glyph": "r",
+                        "fg_color":"#c8c8c8",
+                        "bg_color":"#303030",
+                        }"##;
 
     let result: Result<RawObject, _> = serde_json::from_str(text);
 

@@ -2,44 +2,14 @@
 // Libraries
 //-----------------------------------------------------
 
+use super::fixture::{pack_with, plain_object};
 use super::super::build::build_terrains;
-use super::super::read::{LoadedObject, LoadedPack};
-use super::super::raw::{RawPack, RawTerrain};
-use std::path::PathBuf;
 
 use crate::ripper::content::store::TerrainDef;
 
 //-----------------------------------------------------
 // Helpers
 //-----------------------------------------------------
-
-fn pack(name: &str, objects: Vec<LoadedObject>) -> LoadedPack {
-    LoadedPack {
-        dir: PathBuf::from("packs").join(name),
-        raw: RawPack {
-            format_version: None,
-            name: String::from(name),
-            version: String::from("0.1.0"),
-            description: None,
-            depends_on: Vec::new(),
-        },
-        objects,
-    }
-}
-
-fn object(id: &str, glyph: Option<&str>) -> LoadedObject {
-    LoadedObject {
-        path: PathBuf::from("any.json"),
-        terrain: RawTerrain {
-            format_version: None,
-            id: String::from(id),
-            description: None,
-            glyph: glyph.map(String::from),
-            walkable: true,
-            transparent: true,
-        },
-    }
-}
 
 fn ids(terrains: &[TerrainDef]) -> Vec<String> {
     let mut ids = Vec::new();
@@ -56,8 +26,8 @@ fn ids(terrains: &[TerrainDef]) -> Vec<String> {
 #[test]
 fn terrains_follow_the_load_order_then_the_id() {
     let packs = vec![
-        pack("ice", vec![object("ice:snow", Some("*"))]),
-        pack("base", vec![object("base:wall", Some("#")), object("base:empty", Some("."))]),
+        pack_with("ice", vec![plain_object("ice:snow", Some("*"))]),
+        pack_with("base", vec![plain_object("base:wall", Some("#")), plain_object("base:empty", Some("."))]),
     ];
 
     let terrains = build_terrains(&packs, &[1, 0]);
@@ -67,7 +37,7 @@ fn terrains_follow_the_load_order_then_the_id() {
 
 #[test]
 fn the_glyph_becomes_a_character_and_a_missing_glyph_stays_missing() {
-    let packs = vec![pack("base", vec![object("base:empty", None), object("base:wall", Some("#"))])];
+    let packs = vec![pack_with("base", vec![plain_object("base:empty", None), plain_object("base:wall", Some("#"))])];
 
     let terrains = build_terrains(&packs, &[0]);
 
@@ -77,10 +47,10 @@ fn the_glyph_becomes_a_character_and_a_missing_glyph_stays_missing() {
 
 #[test]
 fn the_flags_are_copied() {
-    let mut solid = object("base:wall", Some("#"));
+    let mut solid = plain_object("base:wall", Some("#"));
     solid.terrain.walkable = false;
     solid.terrain.transparent = false;
-    let packs = vec![pack("base", vec![solid])];
+    let packs = vec![pack_with("base", vec![solid])];
 
     let terrains = build_terrains(&packs, &[0]);
 
@@ -95,8 +65,8 @@ fn no_packs_give_no_terrains() {
 
 #[test]
 fn the_order_of_the_files_does_not_change_the_result() {
-    let one = vec![pack("base", vec![object("base:a", None), object("base:b", None)])];
-    let other = vec![pack("base", vec![object("base:b", None), object("base:a", None)])];
+    let one = vec![pack_with("base", vec![plain_object("base:a", None), plain_object("base:b", None)])];
+    let other = vec![pack_with("base", vec![plain_object("base:b", None), plain_object("base:a", None)])];
 
     assert_eq!(build_terrains(&one, &[0]), build_terrains(&other, &[0]));
 }

@@ -11,7 +11,7 @@ use super::validate::{check_terrain_count, validate};
 use crate::ripper::content::store::Content;
 
 //-----------------------------------------------------
-// Load registry
+// Load content
 //-----------------------------------------------------
 
 pub fn load_content(root: &Path) -> Result<Content, Vec<PackError>> {

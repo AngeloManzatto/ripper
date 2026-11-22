@@ -4,6 +4,8 @@
   "category": "terrain",
   "description": "Open ground. Anything can walk on it and see across it.",
   "glyph": ".",
+  "fg_color": "#404040",
+  "bg_color": "#101010",
   "walkable": true,
   "transparent": true
 }
