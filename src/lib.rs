@@ -3,6 +3,7 @@
 //-----------------------------------------------------
 
 pub mod grid_world;
+pub mod ripper;
 
 //-----------------------------------------------------
 // Imports
@@ -21,7 +22,8 @@ use grid_world::pyo3::layout::{generate_valid_layout_py, mutate_valid_layout_py}
 //-----------------------------------------------------
 
 #[pymodule]
-fn ripper(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+#[pyo3(name = "ripper")]
+fn ripper_py(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyWorld>()?;
     m.add_class::<PyWorldConfig>()?;
     m.add_class::<PyGenerationConfig>()?;

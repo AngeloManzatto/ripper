@@ -2,7 +2,6 @@
 // Libraries
 //-----------------------------------------------------
 
-pub mod core;
 pub mod action;
 pub mod ecs;
 pub mod entity;
