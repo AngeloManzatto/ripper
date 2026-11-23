@@ -4,4 +4,6 @@
 
 pub mod grid;
 pub mod color;
+
+#[cfg(test)]
 pub mod tests;

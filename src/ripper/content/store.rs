@@ -6,6 +6,8 @@ use std::collections::HashMap;
 
 use super::table::{Named, Table};
 
+use crate::ripper::core::color::Color;
+
 //-----------------------------------------------------
 // Terrarain ID
 //-----------------------------------------------------
@@ -21,6 +23,8 @@ pub struct TerrainId(pub u16);
 pub struct TerrainDef {
     pub id: String,
     pub glyph: Option<char>,
+    pub fg_color: Color,
+    pub bg_color: Color,
     pub walkable: bool,
     pub transparent: bool,
 }
@@ -42,8 +46,11 @@ pub struct Content {
 }
 
 impl Content {
+    
     pub fn new(terrains: Vec<TerrainDef>) -> Content {
+
         let mut by_glyph = HashMap::new();
+        
         for (position, terrain) in terrains.iter().enumerate() {
             if let Some(glyph) = terrain.glyph {
                 by_glyph.insert(glyph, TerrainId(position as u16));

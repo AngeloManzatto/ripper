@@ -4,7 +4,7 @@ A living list of the ideas for where the engine and the research can go. It is m
 
 - **Started:** 2026-11-20 (the first eight ideas came from a long walk and were written down the same day).
 - **Voice:** *"Yours"* marks what Angelo said. *"Addition"* marks something added while writing this file, which he may keep, change or throw away. *"Source"* marks something checked against a paper or a page (links at the end).
-- **Where to keep it:** `docs/IDEAS.md`, next to `POET_ISSUES.md` and `POET_ROADMAP.md`.
+- **Where to keep it:** `docs/IDEAS.md`, next to `POET_ISSUES.md` and `POET_ROADMAP.md`. What changed and when goes in `docs/CHANGELOG.md`, not here.
 
 ---
 
@@ -16,7 +16,7 @@ A living list of the ideas for where the engine and the research can go. It is m
 1. Never delete an idea. Change its status and write the reason.
 2. Each idea has the same sections: *Idea*, *Why it matters*, *Related work*, *Additions*, *Needs from the engine*, *First small step*, *Open questions*.
 3. Keep "First small step" small enough to do in one sitting. If it is not, split the idea.
-4. Add a line to the **Changelog** at the bottom whenever something changes.
+4. Add a line to `docs/CHANGELOG.md` whenever something changes (this file keeps the ideas, the changelog keeps the history).
 
 ---
 
@@ -33,6 +33,7 @@ A living list of the ideas for where the engine and the research can go. It is m
 | I-07 | Memory as a graph that entities write to files | seed | I-06, I-05 events |
 | I-08 | Contribute to RL research | ongoing | rigorous experiments |
 | I-09 | A learned generator for entity symbols | seed | I-02 footprints, I-06, a way to score symbols |
+| I-10 | A collision mask on entities (rigid parts and overlappable parts) | seed | I-02 footprints, entity definitions |
 
 ## Foundations that unlock the ideas (current engine work)
 
@@ -43,8 +44,10 @@ A living list of the ideas for where the engine and the research can go. It is m
 | `Grid<T>` (generic 2-D container) | done (`get`, `get_mut`) | I-04, rendering |
 | Layout reader (`parse_layout`: text to `Grid<TerrainId>`, all errors reported) | done, tested | rendering, generation |
 | `Level` (one floor: terrain grid plus a shared `Arc<Content>`) | done, tested | every idea |
-| Terminal drawing (`draw_terrain`) and `examples/show_level` | done: first picture on screen | I-01, I-02 |
-| Colour in the pack data (`Color`, hex strings, `fg`/`bg` on terrain) and a `Frame` of cells | building (step 1: `Color`) | rendering, I-02 |
+| Colour in the pack data (`Color`, hex strings, required `fg_color`/`bg_color` on terrain, validated and parsed in build) | done, tested | rendering, I-02 |
+| `Cell` and `Frame` (`Grid<Cell>`), `paint_terrain`, `paint_level` | done, tested | I-01, I-02 |
+| Readers of a frame: `frame_to_text`, `frame_to_ansi`; `examples/show_level` prints a coloured map | done: first coloured picture on screen | I-01, I-02 |
+| A reader that gives the frame as RGB pixels (for Python and images) | not started | I-02, I-06 |
 | Changing a level (`set_terrain`, stamping rooms) | not started | generation |
 | Generation plus reachability check (terrain only first) | not started | I-03, I-04 |
 | Entity definitions (player, enemy, trap, goal, door, key) | planned, no bridge | I-02, I-03, I-05 |
@@ -92,6 +95,7 @@ A living list of the ideas for where the engine and the research can go. It is m
 - Rendering must support a footprint as one thing (select, colour, move together).
 - **Transparent pixels (2026-11-22).** A frame cell is always opaque (glyph, foreground, background), but what an entity *paints* can leave each channel unset, so whatever is underneath shows. A footprint of 2×2 with two green cells, one blue and one transparent is then four drawing cells, one with nothing set. A goblin on grass sets glyph and foreground and leaves the background unset. In the pack JSON, `null` could mean "unset". Compositing is per channel: a set value overwrites, an unset one is skipped. The frame stays simple and the entities carry the transparency.
 - **Colour as symbol (2026-11-22).** Free RGB is fine to start, but ARC-style frames use a small palette of indexed colours. A palette layer (names mapped to RGB, possibly permuted per level, like the glyph experiment) can sit on top of RGB later.
+- **Collision mask (2026-11-23).** Which cells of a footprint are rigid and which can overlap other entities is a separate question from how they look. See I-10.
 
 **Needs from the engine.** Footprints in entity definitions; collision and line of sight for multi-cell entities; a rendering path.
 
@@ -298,12 +302,37 @@ A living list of the ideas for where the engine and the research can go. It is m
 
 ---
 
+## I-10 — A collision mask on entities
+
+**Status:** seed (added 2026-11-23, from a walk)
+
+**Idea (yours).** Give entities a collision mask, so the engine knows which part of an entity is rigid and which part can overlap other entities.
+
+**Why it matters.** Once an entity is several cells (I-02), "does it block?" can no longer be one yes or no. A tree has a solid trunk and a canopy you walk under. A creature may have a body that blocks and a tail or wings that do not. Without a mask, a multi-cell entity is either fully solid, which makes odd shapes awkward, or fully ghostly.
+
+**Related work.** Game engines keep the shape used for blocking apart from the shape used for drawing: collision layers and masks, and separate hitboxes and hurtboxes in fighting and action games. (Addition, from general knowledge, not re-checked for this file.)
+
+**Additions.**
+- **Three independent properties per cell**, worth keeping apart in the design: how it *looks* (glyph and colours, with unset channels as transparency, I-02), whether it *blocks movement* (solid or overlappable), and whether it *blocks sight* (the `transparent` flag that terrain already has). Terrain's `walkable` is the one-cell version of the second property.
+- **A mask belongs to the footprint.** Each cell of a footprint carries a flag, so the same shape can be described in the pack JSON next to its glyphs and colours.
+- **A rule for overlap between two entities:** they collide only where a solid cell of one meets a solid cell of the other; where an overlappable cell is involved they may share a position, and the paint order decides which one is drawn on top.
+- **Hitbox and hurtbox (addition).** A second mask could say which cells *take damage* or *deal it*, separate from which cells block movement. A later question, but it fits the same place in the definition.
+- **It touches the solvability checks.** Reachability for a multi-cell entity depends on its solid cells: a 2x2 body does not fit through a one-cell gap, a canopy does not matter. The reachability rule (I-03, I-05) has to be told which footprint is walking.
+
+**Needs from the engine.** Entity definitions with footprints (I-02); a per-cell flag in the footprint; a movement rule that reads the mask; later, a reachability check that knows the footprint.
+
+**First small step.** On paper (or in a JSON example, no code), describe one entity with a footprint of at least three cells where one cell is overlappable, say a tree, and write what should happen when the player walks into each of its cells.
+
+**Open questions.** Does the same mask serve movement, attacks and line of sight, or does each need its own? What happens when an overlappable part of an entity ends up on top of a wall? Is the mask fixed per entity kind, or can it change (a door open or closed)?
+
+---
+
 ## Cross-cutting notes
 
 **Dependency picture (rough)**
 
 ```
-packs + Content (done) ──► Level (done) ──► terminal drawing (done) ──► I-01, I-02
+packs + Content (done) ──► Level (done) ──► paint + Frame + readers (done) ──► I-01, I-02
         │                          │
         │                          └──► entity definitions ──► events ──► I-05 ──► I-07
         │                                       │                              ▲
@@ -320,11 +349,11 @@ src/ripper/
   content/     what the engine knows about the game's stuff: Content, Table, TerrainDef, TerrainId
   packs/       loading from disk: raw, read, validate, build, load_content (the one public door)
   world/       layout.rs (text to terrain grid), level.rs (one floor)
-  render/      terminal.rs (glyph pictures); later a Frame of cells and other outputs
+  render/      frame.rs (Cell, Frame), paint.rs (paint_terrain, paint_level: write cells into a frame), terminal.rs (readers: frame_to_text, frame_to_ansi); later an RGB reader
   assets/packs/base/...
 ```
 
-Vocabulary: *Pack* (folder on disk), *Raw* (file shape), *Def* (checked definition), *Id* (number inside its table), *Table* (all defs of one kind), *Content* (the bundle of tables). The old `grid_world` is being replaced beside the new code and will be deleted when nothing depends on it.
+Vocabulary: *Pack* (folder on disk), *Raw* (file shape), *Def* (checked definition), *Id* (number inside its table), *Table* (all defs of one kind), *Content* (the bundle of tables), *Paint* (write cells into a `Frame`), *Render* (turn a finished frame into an output: text, ANSI, RGB). The old `grid_world` is being replaced beside the new code and will be deleted when nothing depends on it.
 
 **Decisions behind the map**
 - No global singleton. `Content` is built once, wrapped in an `Arc`, and every `Level` owns a handle, so tests and experiments can use different content in the same process.
@@ -344,8 +373,8 @@ Vocabulary: *Pack* (folder on disk), *Raw* (file shape), *Def* (checked definiti
 - Id stability when packs change. A dependent pack loads after its dependency, so its ids come after. But an unrelated pack that sorts earlier could shift every number; a lock file of name → number is one answer, and saving things by name (not number) is another.
 - Observation channels for the new terrain and entities.
 - Split `parse_layout` in two: shape (text to `Grid<char>`, no content needed) and meaning (glyphs to ids). It makes entity glyphs a small addition, and leaves room for a per-level palette (I-02).
-- A `Frame` of cells (`Grid<Cell>`) with one draw function per kind of thing, and outputs (terminal, image) reading the frame. Worth building when the second layer (entities) has to be drawn over terrain.
-- A generic `draw_grid` taking a closure for the glyph of a cell, if a second kind of grid ever needs drawing.
+- *(Built 2026-11-23.)* A `Frame` of cells (`Grid<Cell>`) with one `paint_*` function per kind of thing, and outputs reading the frame. What remains: the entity layer, and the RGB reader.
+- *(Mostly settled by the `paint_*` functions and the readers.)* A generic `draw_grid` taking a closure for the glyph of a cell, if a second kind of grid ever needs drawing.
 - Plotting and charts are a separate module, not part of the terminal output.
 - Reloading content at episode boundaries (a new `Arc<Content>` for new levels), and recording which packs and versions an experiment used.
 - Entities that want things of their own (Rain World style), and entities simulated while nobody is looking.
@@ -364,13 +393,3 @@ Vocabulary: *Pack* (folder on disk), *Raw* (file shape), *Def* (checked definiti
 - **bracket-lib** (Rust roguelike toolkit, split into geometry, pathfinding, random, noise, color and terminal crates) — [docs.rs](https://docs.rs/bracket-lib).
 - **Rain World** (Videocult, 2017), on its living ecosystem — [Game Developer: crafting the ecosystem of Rain World](https://gamedeveloper.com/design/crafting-the-complex-chaotic-ecosystem-of-i-rain-world-i-).
 - Also in the background, not re-checked for this file: PCGRL, NetHack/NLE/MiniHack, ARC-AGI-3.
-
----
-
-## Changelog
-
-- **2026-11-20** — File created from the eight ideas of the walk, plus additions and references.
-- **2026-11-20** — I-07: the reference is Rain World (it had been written down as "Cat World"); added what that kind of ecosystem would ask of the engine.
-- **2026-11-20** — New idea I-09 (a learned generator for entity symbols); I-02 now points to it.
-- **2026-11-21** — Engine reorganized into layers (`core`, `content`, `packs`, `world`, `render`); `Registry` became `Content` with a generic `Table<D>`; first `Level` and first terminal picture. Foundations table and dependency picture updated; engine map and decisions added; the entity bridge dropped; parking lot extended.
-- **2026-11-22** — Colour plan agreed: RGB as hex strings, foreground and background required on terrain, a `Frame` of cells as the common source for terminal, image and Python outputs. I-02 gains transparent pixels and the palette thought.

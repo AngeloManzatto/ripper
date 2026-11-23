@@ -2,9 +2,12 @@
 // Libraries
 //-----------------------------------------------------
 
-use super::super::store::TerrainDef;
 use super::super::table::Named;
 use super::super::table::Table;
+
+use crate::ripper::test_support::{
+    wall
+};
 
 //-----------------------------------------------------
 // Helpers
@@ -31,12 +34,8 @@ fn things(names: &[&str]) -> Table<Thing> {
 
 #[test]
 fn a_terrain_is_named_by_its_id() {
-    let wall = TerrainDef {
-        id: "base:wall".to_string(),
-        glyph: Some('#'),
-        walkable: false,
-        transparent: false,
-    };
+
+    let wall = wall();
 
     assert_eq!(wall.name(), "base:wall");
 

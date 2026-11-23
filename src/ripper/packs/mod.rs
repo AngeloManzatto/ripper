@@ -17,6 +17,7 @@ pub mod validate;
 pub mod build;
 mod load_content;
 
+#[cfg(test)]
 pub mod tests;
 
 //-----------------------------------------------------

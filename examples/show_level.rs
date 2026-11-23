@@ -1,11 +1,20 @@
+//-----------------------------------------------------
+// Libraries
+//-----------------------------------------------------
+
 use std::path::PathBuf;
 use std::process;
 use std::sync::Arc;
 
 use ripper::ripper::packs::error::format_errors;
 use ripper::ripper::packs::load_content;
-use ripper::ripper::render::terminal::draw_terrain;
+use ripper::ripper::render::terminal::frame_to_ansi;
+use ripper::ripper::render::paint::paint_level;
 use ripper::ripper::world::level::Level;
+
+//-----------------------------------------------------
+// Layout
+//-----------------------------------------------------
 
 const LAYOUT: &str = "\
 ##########
@@ -14,6 +23,10 @@ const LAYOUT: &str = "\
 #..#..#..#
 #........#
 ##########";
+
+//-----------------------------------------------------
+// Main
+//-----------------------------------------------------
 
 fn main() {
     let packs = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/ripper/assets/packs");
@@ -34,5 +47,5 @@ fn main() {
         }
     };
 
-    println!("{}", draw_terrain(level.terrain(), level.content()));
+    println!("{}", frame_to_ansi(&paint_level(&level)));
 }

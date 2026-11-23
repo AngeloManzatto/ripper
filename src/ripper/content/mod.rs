@@ -17,4 +17,6 @@
 
 pub mod store;
 pub mod table;
+
+#[cfg(test)]
 pub mod tests;

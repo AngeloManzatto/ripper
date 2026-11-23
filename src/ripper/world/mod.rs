@@ -8,4 +8,6 @@
 
 pub mod layout;
 pub mod level;
+
+#[cfg(test)]
 pub mod tests;
