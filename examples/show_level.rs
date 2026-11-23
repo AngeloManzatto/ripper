@@ -29,6 +29,7 @@ const LAYOUT: &str = "\
 //-----------------------------------------------------
 
 fn main() {
+    
     let packs = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/ripper/assets/packs");
 
     let content = match load_content(&packs) {

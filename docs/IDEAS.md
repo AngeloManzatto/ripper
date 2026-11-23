@@ -34,6 +34,7 @@ A living list of the ideas for where the engine and the research can go. It is m
 | I-08 | Contribute to RL research | ongoing | rigorous experiments |
 | I-09 | A learned generator for entity symbols | seed | I-02 footprints, I-06, a way to score symbols |
 | I-10 | A collision mask on entities (rigid parts and overlappable parts) | seed | I-02 footprints, entity definitions |
+| I-11 | A panel (HUD) of its own for each agent | seed | entity state to show, painting into a region of a frame |
 
 ## Foundations that unlock the ideas (current engine work)
 
@@ -47,7 +48,9 @@ A living list of the ideas for where the engine and the research can go. It is m
 | Colour in the pack data (`Color`, hex strings, required `fg_color`/`bg_color` on terrain, validated and parsed in build) | done, tested | rendering, I-02 |
 | `Cell` and `Frame` (`Grid<Cell>`), `paint_terrain`, `paint_level` | done, tested | I-01, I-02 |
 | Readers of a frame: `frame_to_text`, `frame_to_ansi`; `examples/show_level` prints a coloured map | done: first coloured picture on screen | I-01, I-02 |
-| A reader that gives the frame as RGB pixels (for Python and images) | not started | I-02, I-06 |
+| Pixel readers: `frame_to_rgb` (background colour of each cell), `scale_rgb` (each pixel becomes a block), `pack_rgb` (one `u32` per pixel) | done, tested | I-02, I-06 |
+| `examples/show_window` (`minifb`, a dev-dependency): the level in a real window | done: first picture outside the terminal; blocks only, no glyph shapes yet | I-01, I-02 |
+| Glyph shapes in the window (bitmap font) and the Python bridge for the RGB reader | not started | I-02, I-06 |
 | Changing a level (`set_terrain`, stamping rooms) | not started | generation |
 | Generation plus reachability check (terrain only first) | not started | I-03, I-04 |
 | Entity definitions (player, enemy, trap, goal, door, key) | planned, no bridge | I-02, I-03, I-05 |
@@ -327,6 +330,33 @@ A living list of the ideas for where the engine and the research can go. It is m
 
 ---
 
+## I-11 — A panel of its own for each agent
+
+**Status:** seed (added 2026-11-23, from a thought after the first window worked)
+
+**Idea (yours).** Like a normal game, split the screen into the game itself and a panel (GUI) with the player's data: keys, life bar, score and so on. Go further and give *each agent its own panel*. For example, on a 128×128 frame, 128×100 shows the game and 128×28 is reserved for the panel, with a different view for each agent.
+
+**Why it matters.** The panel is the channel through which the agent learns things the world does not show by itself: what it carries, how healthy it is, which sub-tasks are done. That is exactly what I-05 said the agent needs ("the agent needs to *see* progress") and what I-07's memory could expose. It is also a cheap way to control *how much* each agent knows, which makes it a tool for balance (I-08 mentioned start positions as handicaps; the panel is a second handicap) and for ablations (panel on or off, pixels or numbers).
+
+**Related work.** Every game with a HUD; ARC-AGI-3 style frames, where everything the agent sees has to be in the frame. (The second is background from the project's earlier reading, not re-checked for this file.)
+
+**Additions.**
+- **It fits the frame design.** A `Frame` is a canvas that layers paint into. A panel is one more painter that writes into a *region* of it (the bottom 28 rows), as `paint_terrain` writes into the world part. Each agent gets its own frame: the shared world view plus its own panel.
+- **What it needs underneath:** painting into a region (an offset and a size), because today the painters assume they own the whole frame from the top-left corner. A rectangle ("viewport") that can be handed to a painter would be enough.
+- **The world part is then smaller than the world.** A 128×100 view of a 128×128 world means a *camera* that follows the agent. That joins the local window thought of I-04 and answers one of its open questions.
+- **Panel contents are data.** A bar of N cells for life, a row of icons for keys, a row of ticks for finished sub-tasks. The pack could describe the layout in JSON like everything else, and the validator could check that it fits.
+- **Icons are symbols.** A key icon in the panel and a key in the world should be the same shape, which links to I-02 (symbols) and I-09 (generated symbols).
+- **Pixels or numbers.** The panel can be seen as pixels (pure ARC-style: the agent reads the bar) or the same information can go in as a plain vector next to the image. Comparing the two is a ready-made experiment.
+- **A viewer panel (addition).** A spectator window could show several agents' panels side by side, which is useful for watching a co-evolution run.
+
+**Needs from the engine.** Entity state worth showing (health, inventory, objective progress, so the entity work and I-05); painting into a region of a frame; a camera; a panel definition format.
+
+**First small step.** On paper, draw the 128×28 strip: where the life bar goes, where the keys go, which colours, and what it looks like when it is empty. No code.
+
+**Open questions.** Is every agent's panel the same size and layout, or can it differ per role (player, enemy, DM)? Does an enemy see the player's panel? Does a smaller world view hurt the agent more than the panel helps? Where is the line between "the panel tells the agent" and "the agent should have found out for itself"?
+
+---
+
 ## Cross-cutting notes
 
 **Dependency picture (rough)**
@@ -349,7 +379,7 @@ src/ripper/
   content/     what the engine knows about the game's stuff: Content, Table, TerrainDef, TerrainId
   packs/       loading from disk: raw, read, validate, build, load_content (the one public door)
   world/       layout.rs (text to terrain grid), level.rs (one floor)
-  render/      frame.rs (Cell, Frame), paint.rs (paint_terrain, paint_level: write cells into a frame), terminal.rs (readers: frame_to_text, frame_to_ansi); later an RGB reader
+  render/      frame.rs (Cell, Frame), paint.rs (paint_terrain, paint_level: write cells into a frame), terminal.rs (readers: frame_to_text, frame_to_ansi); pixels.rs (RGB readers: frame_to_rgb, scale_rgb, pack_rgb)
   assets/packs/base/...
 ```
 
